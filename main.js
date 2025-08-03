@@ -1,8 +1,10 @@
-$('[data-child]').each(function() {
-var $this = $(this);
-var uniqueId = $this.attr('data-child');
-$('[data-parent="' + uniqueId + '"]').append($this);
-});
+if (window.innerWidth > 1024) {
+  $('[data-child]').each(function () {
+    var $this = $(this);
+    var uniqueId = $this.attr('data-child');
+    $('[data-parent="' + uniqueId + '"]').append($this);
+  });
+}
 
 //FAQ
 document.addEventListener("DOMContentLoaded", function () {
