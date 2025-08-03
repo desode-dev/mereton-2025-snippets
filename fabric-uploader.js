@@ -174,6 +174,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   UploadTool.initializeUploadTool("1d97ae1bd6c1cf6efc5d6d6a937d05e47bb464528d8cdad5");
+
   document.getElementById('single-test-upload').addEventListener('fileUploaded', (event) => {
     const { fileUrl, fileName } = event.detail;
     if (!isFileTypeAllowed(fileName)) {
@@ -182,10 +183,40 @@ window.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (fileUrlField) fileUrlField.value = fileUrl;
+
     uploadedImage = new Image();
-  //  uploadedImage.crossOrigin = "Anonymous";
+    uploadedImage.crossOrigin = "Anonymous";
     uploadedImage.onload = () => {
       imgLoaded = true;
+
+      // Try to extract EXIF metadata and auto-fill PPI
+      fetch(fileUrl)
+        .then(response => response.blob())
+        .then(blob => {
+          const reader = new FileReader();
+          reader.onload = function () {
+            const exifData = EXIF.readFromBinaryFile(this.result);
+            const xRes = exifData.XResolution;
+            const resUnit = exifData.ResolutionUnit; // 2 = inches, 3 = cm
+
+            let calculatedPpi = 300; // default fallback
+            if (xRes && resUnit === 2) {
+              calculatedPpi = xRes;
+            } else if (xRes && resUnit === 3) {
+              calculatedPpi = xRes * 2.54;
+            }
+
+            const ppiInput = document.getElementById('imagePpi');
+            if (ppiInput) {
+              ppiInput.value = Math.round(calculatedPpi);
+            }
+
+            drawPattern();
+            calculateDPI();
+          };
+          reader.readAsArrayBuffer(blob);
+        });
+
       setupImageForCanvas();
     };
     uploadedImage.src = fileUrl;
