@@ -5,6 +5,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const printWidthInput = document.getElementById('printWidth');
   const imageWidthCmDisplay = document.getElementById('imageWidthCm');
   const assumedDpiDisplay = document.getElementById('assumedDpi');
+  const ppiSelect = document.getElementById('imagePpi');
+  const ppiHelpText = document.getElementById('ppiHelpText');
   const canvas = document.getElementById('previewCanvas');
   const ctx = canvas.getContext('2d');
   const fileUrlField = document.getElementById('uploadcare-file-url');
@@ -33,7 +35,7 @@ window.addEventListener('DOMContentLoaded', () => {
   function drawPattern() {
     const scale = parseInt(scaleSlider.value) / 100;
     const repeatStyle = document.getElementById('repeatStyle').value;
-    const userPpi = parseFloat(document.getElementById('imagePpi').value || '300');
+    const userPpi = parseFloat(ppiSelect.value) || 300;
 
     const imageWidthCm = (uploadedImage.width / userPpi) * 2.54;
     const imageHeightCm = (uploadedImage.height / userPpi) * 2.54;
@@ -139,14 +141,15 @@ window.addEventListener('DOMContentLoaded', () => {
   function calculateDPI() {
     const printWidthCM = parseFloat(printWidthInput.value);
     const scale = parseInt(scaleSlider.value) / 100;
+    const userPpi = parseFloat(ppiSelect.value) || 300;
     const printWidthInches = (printWidthCM / 2.54) * scale;
     const dpi = uploadedImage.width / printWidthInches;
-    dpiDisplay.textContent = Math.round(dpi);
 
-    const userPpi = parseFloat(document.getElementById('imagePpi').value || '300');
-    assumedDpiDisplay.textContent = userPpi;
+    if (dpiDisplay) dpiDisplay.textContent = Math.round(dpi);
+    if (assumedDpiDisplay) assumedDpiDisplay.textContent = isNaN(userPpi) ? 'N/A' : userPpi;
   }
 
+  // Listeners
   scaleSlider.addEventListener('input', () => {
     scaleValue.textContent = scaleSlider.value;
     if (imgLoaded) {
@@ -156,16 +159,16 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   printWidthInput.addEventListener('input', updateCanvasSize);
-  document.getElementById('imagePpi').addEventListener('input', () => {
-    if (imgLoaded) {
+  ppiSelect.addEventListener('change', () => {
+    const isUnsure = ppiSelect.value === 'unsure';
+    ppiHelpText.style.display = isUnsure ? 'block' : 'none';
+    if (!isUnsure && imgLoaded) {
       drawPattern();
       calculateDPI();
     }
   });
   document.getElementById('repeatStyle').addEventListener('change', () => {
-    if (imgLoaded) {
-      drawPattern();
-    }
+    if (imgLoaded) drawPattern();
   });
 
   const allowedExtensions = ['png', 'jpg', 'jpeg'];
@@ -188,35 +191,6 @@ window.addEventListener('DOMContentLoaded', () => {
     uploadedImage.crossOrigin = "Anonymous";
     uploadedImage.onload = () => {
       imgLoaded = true;
-
-      // Try to extract EXIF metadata and auto-fill PPI
-      fetch(fileUrl)
-        .then(response => response.blob())
-        .then(blob => {
-          const reader = new FileReader();
-          reader.onload = function () {
-            const exifData = EXIF.readFromBinaryFile(this.result);
-            const xRes = exifData.XResolution;
-            const resUnit = exifData.ResolutionUnit; // 2 = inches, 3 = cm
-
-            let calculatedPpi = 300; // default fallback
-            if (xRes && resUnit === 2) {
-              calculatedPpi = xRes;
-            } else if (xRes && resUnit === 3) {
-              calculatedPpi = xRes * 2.54;
-            }
-
-            const ppiInput = document.getElementById('imagePpi');
-            if (ppiInput) {
-              ppiInput.value = Math.round(calculatedPpi);
-            }
-
-            drawPattern();
-            calculateDPI();
-          };
-          reader.readAsArrayBuffer(blob);
-        });
-
       setupImageForCanvas();
     };
     uploadedImage.src = fileUrl;
