@@ -17,6 +17,17 @@ window.addEventListener('DOMContentLoaded', () => {
   const hiddenRepeat = document.getElementById('repeat-style');
   const hiddenScale = document.getElementById('image-scale');
 
+  // Add to Cart button control
+  const addToCartBtn = document.getElementById('addToCart');
+  function setCartEnabled(enabled) {
+    if (!addToCartBtn) return;
+    addToCartBtn.disabled = !enabled;
+    addToCartBtn.style.opacity = enabled ? '1' : '0.2';
+    addToCartBtn.style.pointerEvents = enabled ? 'auto' : 'none';
+  }
+  // Start disabled
+  setCartEnabled(false);
+
   let uploadedImage = new Image();
   let imgLoaded = false;
   let offsetX = 0;
@@ -40,54 +51,53 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-function drawRulers(pxPerCm) {
-  const notchLength = 10;
-  const fontSize = 10;
+  function drawRulers(pxPerCm) {
+    const notchLength = 10;
+    const fontSize = 10;
 
-  ctx.save();
-  ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, canvas.width, notchLength + fontSize + 2);
-  ctx.fillRect(0, 0, notchLength + fontSize + 2, canvas.height);
+    ctx.save();
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, notchLength + fontSize + 2);
+    ctx.fillRect(0, 0, notchLength + fontSize + 2, canvas.height);
 
-  ctx.strokeStyle = '#999';
-  ctx.fillStyle = '#666';
-  ctx.lineWidth = 1;
-  ctx.font = `${fontSize}px sans-serif`;
-  ctx.textAlign = 'center';
+    ctx.strokeStyle = '#999';
+    ctx.fillStyle = '#666';
+    ctx.lineWidth = 1;
+    ctx.font = `${fontSize}px sans-serif`;
+    ctx.textAlign = 'center';
 
-  const cmPerNotch = 5;
-  const totalWidthCM = canvas.width / pxPerCm;
-  const totalHeightCM = canvas.height / pxPerCm;
+    const cmPerNotch = 5;
+    const totalWidthCM = canvas.width / pxPerCm;
+    const totalHeightCM = canvas.height / pxPerCm;
 
-  for (let cm = 0; cm <= totalWidthCM; cm += cmPerNotch) {
-    const x = cm * pxPerCm;
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, notchLength);
-    ctx.stroke();
-    if (cm % 10 === 0) {
-      ctx.fillText(cm.toString(), x, notchLength + fontSize);
+    for (let cm = 0; cm <= totalWidthCM; cm += cmPerNotch) {
+      const x = cm * pxPerCm;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, notchLength);
+      ctx.stroke();
+      if (cm % 10 === 0) {
+        ctx.fillText(cm.toString(), x, notchLength + fontSize);
+      }
     }
-  }
 
-  for (let cm = 0; cm <= totalHeightCM; cm += cmPerNotch) {
-    const y = cm * pxPerCm;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(notchLength, y);
-    ctx.stroke();
-    if (cm % 10 === 0) {
-      ctx.save();
-      ctx.translate(notchLength + 2, y + fontSize / 2);
-      ctx.rotate(-Math.PI / 2);
-      ctx.fillText(cm.toString(), 0, 0);
-      ctx.restore();
+    for (let cm = 0; cm <= totalHeightCM; cm += cmPerNotch) {
+      const y = cm * pxPerCm;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(notchLength, y);
+      ctx.stroke();
+      if (cm % 10 === 0) {
+        ctx.save();
+        ctx.translate(notchLength + 2, y + fontSize / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillText(cm.toString(), 0, 0);
+        ctx.restore();
+      }
     }
+
+    ctx.restore();
   }
-
-  ctx.restore();
-}
-
 
   function drawPattern() {
     const scale = parseInt(scaleSlider.value) / 100;
@@ -139,11 +149,11 @@ function drawRulers(pxPerCm) {
         break;
     }
 
-drawRulers(pxPerCm);
+    drawRulers(pxPerCm);
 
     if (hiddenWidth) hiddenWidth.value = scaledImageWidthCm.toFixed(2) + 'cm';
-if (hiddenRepeat) hiddenRepeat.value = repeatStyle;
-if (hiddenScale) hiddenScale.value = scaleSlider.value + '%';
+    if (hiddenRepeat) hiddenRepeat.value = repeatStyle;
+    if (hiddenScale) hiddenScale.value = scaleSlider.value + '%';
     imageWidthCmDisplay.textContent = Math.round(scaledImageWidthCm);
   }
 
@@ -158,36 +168,34 @@ if (hiddenScale) hiddenScale.value = scaleSlider.value + '%';
     if (assumedDpiDisplay) assumedDpiDisplay.textContent = isNaN(userPpi) ? 'N/A' : userPpi;
   }
 
-function drawSingleTile() {
-  const userPpi = parseFloat(ppiSelect.value) || 300;
-  const scale = parseInt(scaleSlider.value) / 100;
+  function drawSingleTile() {
+    const userPpi = parseFloat(ppiSelect.value) || 300;
+    const scale = parseInt(scaleSlider.value) / 100;
 
-  // Convert image resolution to physical cm size
-  const imageWidthCm = (uploadedImage.width / userPpi) * 2.54;
-  const imageHeightCm = (uploadedImage.height / userPpi) * 2.54;
+    // Convert image resolution to physical cm size
+    const imageWidthCm = (uploadedImage.width / userPpi) * 2.54;
+    const imageHeightCm = (uploadedImage.height / userPpi) * 2.54;
 
-  // Apply user scale
-  const scaledWidthCm = imageWidthCm * scale;
-  const scaledHeightCm = imageHeightCm * scale;
+    // Apply user scale
+    const scaledWidthCm = imageWidthCm * scale;
+    const scaledHeightCm = imageHeightCm * scale;
 
-  // Convert physical cm to screen pixels (37.8 px/cm @ 96dpi)
-  const pxPerCm = 37.8;
-  const renderWidthPx = scaledWidthCm * pxPerCm;
-  const renderHeightPx = scaledHeightCm * pxPerCm;
+    // Convert physical cm to screen pixels (37.8 px/cm @ 96dpi)
+    const pxPerCm = 37.8;
+    const renderWidthPx = scaledWidthCm * pxPerCm;
+    const renderHeightPx = scaledHeightCm * pxPerCm;
 
-  // Set canvas to target render size
-  singleTileCanvas.width = renderWidthPx;
-  singleTileCanvas.height = renderHeightPx;
+    // Set canvas to target render size
+    singleTileCanvas.width = renderWidthPx;
+    singleTileCanvas.height = renderHeightPx;
 
-  // Draw image scaled to real-world screen size
-  singleCtx.clearRect(0, 0, singleTileCanvas.width, singleTileCanvas.height);
-  singleCtx.drawImage(uploadedImage, 0, 0, renderWidthPx, renderHeightPx);
+    // Draw image scaled to real-world screen size
+    singleCtx.clearRect(0, 0, singleTileCanvas.width, singleTileCanvas.height);
+    singleCtx.drawImage(uploadedImage, 0, 0, renderWidthPx, renderHeightPx);
 
-  // Apply transform for current pan position
-  singleTileCanvas.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
-}
-
-
+    // Apply transform for current pan position
+    singleTileCanvas.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+  }
 
   scaleSlider.addEventListener('input', () => {
     scaleValue.textContent = scaleSlider.value;
@@ -199,6 +207,7 @@ function drawSingleTile() {
   });
 
   printWidthInput.addEventListener('input', updateCanvasSize);
+
   ppiSelect.addEventListener('change', () => {
     const isUnsure = ppiSelect.value === 'unsure';
     ppiHelpText.style.display = isUnsure ? 'block' : 'none';
@@ -225,12 +234,12 @@ function drawSingleTile() {
     singleTileCanvas.classList.remove('dragging');
   });
 
-document.addEventListener('mousemove', (e) => {
-  if (!isDragging) return;
-  offsetX = e.clientX - dragStartX;
-  offsetY = e.clientY - dragStartY;
-  singleTileCanvas.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
-});
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    offsetX = e.clientX - dragStartX;
+    offsetY = e.clientY - dragStartY;
+    singleTileCanvas.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+  });
 
   const allowedExtensions = ['png', 'jpg', 'jpeg'];
   function isFileTypeAllowed(fileName) {
@@ -240,39 +249,44 @@ document.addEventListener('mousemove', (e) => {
   UploadTool.initializeUploadTool("1d97ae1bd6c1cf6efc5d6d6a937d05e47bb464528d8cdad5");
 
   document.getElementById('single-test-upload').addEventListener('fileUploaded', (event) => {
-  const { fileUrl, fileName } = event.detail;
+    const { fileUrl, fileName } = event.detail;
 
-  if (!isFileTypeAllowed(fileName)) {
-    alert("File type not allowed. Please upload PNG, or JPG files only.");
-    window.location.reload();
-    return;
+    // Before validating, keep the button disabled until we know it's good
+    setCartEnabled(false);
+
+    if (!isFileTypeAllowed(fileName)) {
+      alert("File type not allowed. Please upload PNG, or JPG files only.");
+      window.location.reload();
+      return;
+    }
+
+    if (fileUrlField) fileUrlField.value = fileUrl;
+    if (fileNameField) fileNameField.value = fileName;
+
+    uploadedImage = new Image();
+    uploadedImage.crossOrigin = "Anonymous";
+    uploadedImage.onload = () => {
+      imgLoaded = true;
+      setupImageForCanvas();
+
+      // Enable Add to Cart after the image is fully loaded/rendered
+      setCartEnabled(true);
+    };
+    uploadedImage.src = fileUrl;
+  });
+
+  function setupImageForCanvas() {
+    scaleSlider.value = 100;
+    scaleValue.textContent = 100;
+
+    // Reset tile preview offsets
+    offsetX = 0;
+    offsetY = 0;
+    singleTileCanvas.style.transform = `translate(0px, 0px)`;
+
+    updateCanvasSize();
+    drawSingleTile(); // redraw the full image at actual size
   }
-
-  if (fileUrlField) fileUrlField.value = fileUrl;
-  if (fileNameField) fileNameField.value = fileName;
-
-  uploadedImage = new Image();
-  uploadedImage.crossOrigin = "Anonymous";
-  uploadedImage.onload = () => {
-    imgLoaded = true;
-    setupImageForCanvas();
-  };
-  uploadedImage.src = fileUrl;
-});
-
-
-function setupImageForCanvas() {
-  scaleSlider.value = 100;
-  scaleValue.textContent = 100;
-
-  // Reset tile preview offsets
-  offsetX = 0;
-  offsetY = 0;
-  singleTileCanvas.style.transform = `translate(0px, 0px)`;
-
-  updateCanvasSize();
-  drawSingleTile(); // redraw the full image at actual size
-}
 
   const widthFromCMS = printWidthInput.getAttribute('data-width');
   if (widthFromCMS) printWidthInput.value = widthFromCMS;
