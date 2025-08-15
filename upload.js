@@ -100,62 +100,75 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   function drawPattern() {
-    const scale = parseInt(scaleSlider.value) / 100;
-    const repeatStyle = document.getElementById('repeatStyle').value;
-    const userPpi = parseFloat(ppiSelect.value) || 300;
+  const scale = parseInt(scaleSlider.value) / 100;
 
-    const imageWidthCm = (uploadedImage.width / userPpi) * 2.54;
-    const imageHeightCm = (uploadedImage.height / userPpi) * 2.54;
+  // Normalize repeat style to match switch keys
+  const repeatStyle = document.getElementById('repeatStyle').value.toLowerCase().replace(/\s+/g, '-');
 
-    const scaledImageWidthCm = imageWidthCm * scale;
-    const scaledImageHeightCm = imageHeightCm * scale;
-    const pxPerCm = canvas.height / 100;
-    const tileWidth = scaledImageWidthCm * pxPerCm;
-    const tileHeight = scaledImageHeightCm * pxPerCm;
+  // Normalize DPI select (your HTML uses "300 DPI", "Unsure")
+  const rawPpi = ppiSelect.value;
+  const userPpi = parseFloat(rawPpi) || 300;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const imageWidthCm  = (uploadedImage.width  / userPpi) * 2.54;
+  const imageHeightCm = (uploadedImage.height / userPpi) * 2.54;
 
-    switch (repeatStyle) {
-      case 'full-drop':
-        for (let y = 0; y <= canvas.height; y += tileHeight) {
-          for (let x = 0; x <= canvas.width; x += tileWidth) {
-            ctx.drawImage(uploadedImage, x, y, tileWidth, tileHeight);
-          }
+  const scaledImageWidthCm  = imageWidthCm  * scale;
+  const scaledImageHeightCm = imageHeightCm * scale;
+  const pxPerCm = canvas.height / 100;
+  const tileWidth  = scaledImageWidthCm  * pxPerCm;
+  const tileHeight = scaledImageHeightCm * pxPerCm;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  switch (repeatStyle) {
+    case 'full-drop':
+      for (let y = 0; y <= canvas.height; y += tileHeight) {
+        for (let x = 0; x <= canvas.width; x += tileWidth) {
+          ctx.drawImage(uploadedImage, x, y, tileWidth, tileHeight);
         }
-        break;
-      case 'half-drop':
-        for (let x = 0; x <= canvas.width + tileWidth; x += tileWidth) {
+      }
+      break;
+
+    case 'half-drop':
+      for (let x = 0; x <= canvas.width + tileWidth; x += tileWidth) {
+        const col = Math.floor(x / tileWidth);
+        const verticalOffset = (col % 2) * (tileHeight / 2);
+        for (let y = -tileHeight; y <= canvas.height + tileHeight; y += tileHeight) {
+          ctx.drawImage(uploadedImage, x, y + verticalOffset, tileWidth, tileHeight);
+        }
+      }
+      break;
+
+    case 'mirror':
+      for (let y = 0; y <= canvas.height; y += tileHeight) {
+        for (let x = 0; x <= canvas.width; x += tileWidth) {
           const col = Math.floor(x / tileWidth);
-          const verticalOffset = (col % 2) * (tileHeight / 2);
-          for (let y = -tileHeight; y <= canvas.height + tileHeight; y += tileHeight) {
-            ctx.drawImage(uploadedImage, x, y + verticalOffset, tileWidth, tileHeight);
-          }
+          const row = Math.floor(y / tileHeight);
+          const flipX = col % 2 === 1;
+          const flipY = row % 2 === 1;
+          ctx.save();
+          ctx.translate(x + (flipX ? tileWidth : 0), y + (flipY ? tileHeight : 0));
+          ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+          ctx.drawImage(uploadedImage, 0, 0, tileWidth, tileHeight);
+          ctx.restore();
         }
-        break;
-      case 'mirror':
-        for (let y = 0; y <= canvas.height; y += tileHeight) {
-          for (let x = 0; x <= canvas.width; x += tileWidth) {
-            const col = Math.floor(x / tileWidth);
-            const row = Math.floor(y / tileHeight);
-            const flipX = col % 2 === 1;
-            const flipY = row % 2 === 1;
-            ctx.save();
-            ctx.translate(x + (flipX ? tileWidth : 0), y + (flipY ? tileHeight : 0));
-            ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-            ctx.drawImage(uploadedImage, 0, 0, tileWidth, tileHeight);
-            ctx.restore();
-          }
-        }
-        break;
-    }
+      }
+      break;
 
-    drawRulers(pxPerCm);
-
-    if (hiddenWidth) hiddenWidth.value = scaledImageWidthCm.toFixed(2) + 'cm';
-    if (hiddenRepeat) hiddenRepeat.value = repeatStyle;
-    if (hiddenScale) hiddenScale.value = scaleSlider.value + '%';
-    imageWidthCmDisplay.textContent = Math.round(scaledImageWidthCm);
+    default:
+      // Optional: draw a single tile if value is unexpected
+      ctx.drawImage(uploadedImage, 0, 0, tileWidth, tileHeight);
   }
+
+  drawRulers(pxPerCm);
+
+  if (hiddenWidth)  hiddenWidth.value  = scaledImageWidthCm.toFixed(2) + 'cm';
+  if (hiddenRepeat) hiddenRepeat.value = repeatStyle; // now normalized
+  if (hiddenScale)  hiddenScale.value  = scaleSlider.value + '%';
+
+  imageWidthCmDisplay.textContent = Math.round(scaledImageWidthCm);
+}
+
 
   function calculateDPI() {
     const printWidthCM = parseFloat(printWidthInput.value);
@@ -209,14 +222,14 @@ window.addEventListener('DOMContentLoaded', () => {
   printWidthInput.addEventListener('input', updateCanvasSize);
 
   ppiSelect.addEventListener('change', () => {
-    const isUnsure = ppiSelect.value === 'unsure';
-    ppiHelpText.style.display = isUnsure ? 'block' : 'none';
-    if (!isUnsure && imgLoaded) {
-      drawPattern();
-      calculateDPI();
-      drawSingleTile();
-    }
-  });
+  const isUnsure = ppiSelect.value.toLowerCase() === 'unsure';
+  ppiHelpText.style.display = isUnsure ? 'block' : 'none';
+  if (!isUnsure && imgLoaded) {
+    drawPattern();
+    calculateDPI();
+    drawSingleTile();
+  }
+});
 
   document.getElementById('repeatStyle').addEventListener('change', () => {
     if (imgLoaded) drawPattern();
