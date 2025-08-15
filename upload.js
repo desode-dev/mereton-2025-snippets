@@ -12,7 +12,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const singleTileCanvas = document.getElementById('singleTileCanvas');
   const singleCtx = singleTileCanvas.getContext('2d');
   const fileUrlField = document.getElementById('uploadcare-file-url');
-
+  const fileNameField = document.getElementById('file-name');
   const hiddenWidth = document.getElementById('image-width');
   const hiddenRepeat = document.getElementById('repeat-style');
   const hiddenScale = document.getElementById('image-scale');
@@ -141,9 +141,9 @@ function drawRulers(pxPerCm) {
 
 drawRulers(pxPerCm);
 
-    if (hiddenWidth) hiddenWidth.value = scaledImageWidthCm.toFixed(2);
-    if (hiddenRepeat) hiddenRepeat.value = repeatStyle;
-    if (hiddenScale) hiddenScale.value = scaleSlider.value;
+    if (hiddenWidth) hiddenWidth.value = scaledImageWidthCm.toFixed(2) + 'cm';
+if (hiddenRepeat) hiddenRepeat.value = repeatStyle;
+if (hiddenScale) hiddenScale.value = scaleSlider.value + '%';
     imageWidthCmDisplay.textContent = Math.round(scaledImageWidthCm);
   }
 
@@ -240,22 +240,26 @@ document.addEventListener('mousemove', (e) => {
   UploadTool.initializeUploadTool("1d97ae1bd6c1cf6efc5d6d6a937d05e47bb464528d8cdad5");
 
   document.getElementById('single-test-upload').addEventListener('fileUploaded', (event) => {
-    const { fileUrl, fileName } = event.detail;
-    if (!isFileTypeAllowed(fileName)) {
-      alert("File type not allowed. Please upload PNG, or JPG files only.");
-      window.location.reload();
-      return;
-    }
-    if (fileUrlField) fileUrlField.value = fileUrl;
+  const { fileUrl, fileName } = event.detail;
 
-    uploadedImage = new Image();
-    uploadedImage.crossOrigin = "Anonymous";
-    uploadedImage.onload = () => {
-      imgLoaded = true;
-      setupImageForCanvas();
-    };
-    uploadedImage.src = fileUrl;
-  });
+  if (!isFileTypeAllowed(fileName)) {
+    alert("File type not allowed. Please upload PNG, or JPG files only.");
+    window.location.reload();
+    return;
+  }
+
+  if (fileUrlField) fileUrlField.value = fileUrl;
+  if (fileNameField) fileNameField.value = fileName;
+
+  uploadedImage = new Image();
+  uploadedImage.crossOrigin = "Anonymous";
+  uploadedImage.onload = () => {
+    imgLoaded = true;
+    setupImageForCanvas();
+  };
+  uploadedImage.src = fileUrl;
+});
+
 
 function setupImageForCanvas() {
   scaleSlider.value = 100;
