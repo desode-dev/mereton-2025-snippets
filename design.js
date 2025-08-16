@@ -79,7 +79,7 @@ Webflow.push(function() {
 
 
 // ===============================
-// Fabric Selection + Save Nudge
+// Fabric Selection + Save Nudge + Add-to-Cart Gating
 // ===============================
 window.addEventListener('DOMContentLoaded', function () {
   const allFabricCards = document.querySelectorAll('.design-fabric');
@@ -90,30 +90,56 @@ window.addEventListener('DOMContentLoaded', function () {
   const largeButtonArrow = document.querySelector('.large-button-arrow');
   const largeButtonChange = document.querySelector('.large-button-change');
 
-  // Nudge #saveSelection on every fabric change
-function nudgeSaveSelection() {
-  const el = document.getElementById('saveSelection');
-  if (!el) return;
-
-  // 1) Jump down instantly (no transition)
-  el.style.transition = 'none';
-  el.style.transform = 'translateY(100%)';
-  // Force a reflow so the browser commits this state
-  void el.offsetHeight;
-
-  // 2) Restore transition and animate up
-  el.style.transition = ''; // fall back to CSS rule
-  el.style.transform = 'translateY(0)';
-}
-
-// Delegate to catch ALL ways the radio might change (click, keyboard, programmatic)
-document.addEventListener('change', (e) => {
-  if (e.target && e.target.matches('input[type="radio"][name="fabric"]')) {
-    nudgeSaveSelection();
+  // --- Add to Cart gating (fabric + optional colour) ---
+  function setCartEnabled(enabled) {
+    if (!designAddCart) return;
+    designAddCart.disabled = !enabled;
+    designAddCart.style.opacity = enabled ? '1' : '0.2';
+    designAddCart.style.pointerEvents = enabled ? 'auto' : 'none';
+    designAddCart.setAttribute('aria-disabled', String(!enabled));
   }
-});
+  function isFabricSelected() {
+    return !!document.querySelector('input[type="radio"][name="fabric"]:checked');
+  }
+  function isColourRequired() {
+    return document.querySelectorAll('input[type="radio"][name="Colour"]').length > 0;
+  }
+  function isColourSelected() {
+    return !!document.querySelector('input[type="radio"][name="Colour"]:checked');
+  }
+  function updateCartState() {
+    const ok = isFabricSelected() && (!isColourRequired() || isColourSelected());
+    setCartEnabled(ok);
+  }
+  // Start disabled
+  setCartEnabled(false);
 
-  // saveSelection nudge bits
+  // Nudge #saveSelection on every fabric change
+  function nudgeSaveSelection() {
+    const el = document.getElementById('saveSelection');
+    if (!el) return;
+    // 1) Jump down instantly (no transition)
+    el.style.transition = 'none';
+    el.style.transform = 'translateY(100%)';
+    // Force a reflow so the browser commits this state
+    void el.offsetHeight;
+    // 2) Restore transition and animate up
+    el.style.transition = ''; // fall back to CSS rule
+    el.style.transform = 'translateY(0)';
+  }
+
+  // Delegate to catch ALL ways the radio might change (click, keyboard, programmatic)
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.matches('input[type="radio"][name="fabric"]')) {
+      nudgeSaveSelection();
+      updateCartState(); // keep button state in sync
+    }
+    if (e.target && e.target.matches('input[type="radio"][name="Colour"]')) {
+      updateCartState(); // colour affects button only if present
+    }
+  });
+
+  // saveSelection nudge bits (kept for completeness if you still use the class-based version elsewhere)
   const saveSelection = document.getElementById('saveSelection');
   function revealSaveSelection() {
     if (!saveSelection) return;
@@ -267,6 +293,9 @@ document.addEventListener('change', (e) => {
 
     // Nudge bar (only on active changes)
     if (nudge) revealSaveSelection();
+
+    // Keep button state correct
+    updateCartState();
   }
 
   // Card click → set radio and dispatch change (delegated handler will run)
@@ -329,6 +358,8 @@ document.addEventListener('change', (e) => {
       });
       const selectedSwatch = radio.closest('.colour-swatch');
       if (selectedSwatch) selectedSwatch.style.border = '1px solid black';
+
+      updateCartState(); // colour selection may unlock the button
     });
   });
 
@@ -362,6 +393,9 @@ document.addEventListener('change', (e) => {
   // If a radio is pre-checked in the DOM, sync state (no nudge)
   const initiallySelected = document.querySelector('input[type="radio"][name="fabric"]:checked');
   if (initiallySelected) onFabricSelected(initiallySelected, { nudge: false });
+
+  // Ensure button state is correct after any preselection/restore
+  updateCartState();
 
   // Clear session on add to cart if you use that flow
   if (designAddCart) {
