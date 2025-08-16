@@ -90,6 +90,29 @@ window.addEventListener('DOMContentLoaded', function () {
   const largeButtonArrow = document.querySelector('.large-button-arrow');
   const largeButtonChange = document.querySelector('.large-button-change');
 
+  // Nudge #saveSelection on every fabric change
+function nudgeSaveSelection() {
+  const el = document.getElementById('saveSelection');
+  if (!el) return;
+
+  // 1) Jump down instantly (no transition)
+  el.style.transition = 'none';
+  el.style.transform = 'translateY(100%)';
+  // Force a reflow so the browser commits this state
+  void el.offsetHeight;
+
+  // 2) Restore transition and animate up
+  el.style.transition = ''; // fall back to CSS rule
+  el.style.transform = 'translateY(0)';
+}
+
+// Delegate to catch ALL ways the radio might change (click, keyboard, programmatic)
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.matches('input[type="radio"][name="fabric"]')) {
+    nudgeSaveSelection();
+  }
+});
+
   // saveSelection nudge bits
   const saveSelection = document.getElementById('saveSelection');
   function revealSaveSelection() {
