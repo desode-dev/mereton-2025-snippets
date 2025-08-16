@@ -1,3 +1,4 @@
+// Scale slider → background scaling + floating output
 document.getElementById('scaleSlider').addEventListener('input', function () {
   let scaleValue = this.value;
 
@@ -6,7 +7,7 @@ document.getElementById('scaleSlider').addEventListener('input', function () {
 
   // Update scale output text with %
   const output = document.getElementById('scaleOutput');
-  output.textContent = `${scaleValue}%`;
+  if (output) output.textContent = `${scaleValue}%`;
 
   // Move output to match thumb
   const slider = this;
@@ -16,10 +17,9 @@ document.getElementById('scaleSlider').addEventListener('input', function () {
   const percent = (scaleValue - min) / (max - min);
 
   // Calculate exact thumb center offset
-  const thumbWidth = 24; // Adjust this to match your styled thumb width
+  const thumbWidth = 24; // match your styled thumb
   const offset = percent * (sliderWidth - thumbWidth) + thumbWidth / 2;
-
-  output.style.left = `${offset}px`;
+  if (output) output.style.left = `${offset}px`;
 
   // Apply background size
   document.querySelectorAll('.mask, .small-slide').forEach(function (el) {
@@ -29,7 +29,7 @@ document.getElementById('scaleSlider').addEventListener('input', function () {
   });
 });
 
-// Handle thumbnail click event to change viewer
+// Thumbnail click → change viewer images
 document.querySelectorAll('.change-viewer-thumb').forEach(function(thumb) {
   thumb.addEventListener('click', function() {
     let newimg = this.getAttribute('src');
@@ -44,7 +44,7 @@ document.querySelectorAll('.change-viewer-thumb').forEach(function(thumb) {
   });
 });
 
-// Display colour names
+// Display colour names under thumbs
 document.querySelectorAll('.product-viewer-thumb').forEach(function(thumb) {
   const img = thumb.querySelector('img');
   if (img) {
@@ -68,19 +68,19 @@ document.querySelectorAll('.product-viewer-thumb').forEach(function(thumb) {
   }
 });
 
-// Thumbnails for slider
+// Webflow slider-thumbs sync
 Webflow.push(function() {
   $('[data-thumbs-for]').on('click', '.w-slide', function() {
     var target = $($(this).parents('.w-slider').attr('data-thumbs-for'));
     if (target.length == 0) return;
-
     target.find('.w-slider-nav').children().eq($(this).index()).trigger('tap');
   });
 });
 
 
-// Fabric Selection Script with Display Output + UI Toggle + Session Clear
-
+// ===============================
+// Fabric Selection + Save Nudge
+// ===============================
 window.addEventListener('DOMContentLoaded', function () {
   const allFabricCards = document.querySelectorAll('.design-fabric');
   const radios = document.querySelectorAll('input[type="radio"][name="fabric"]');
@@ -89,6 +89,15 @@ window.addEventListener('DOMContentLoaded', function () {
   const designAddCart = document.getElementById('designAddCart');
   const largeButtonArrow = document.querySelector('.large-button-arrow');
   const largeButtonChange = document.querySelector('.large-button-change');
+
+  // saveSelection nudge bits
+  const saveSelection = document.getElementById('saveSelection');
+  function revealSaveSelection() {
+    if (!saveSelection) return;
+    saveSelection.classList.remove('is-visible');
+    void saveSelection.offsetWidth; // reflow to retrigger transition
+    saveSelection.classList.add('is-visible');
+  }
 
   function updateSelectedFabricDisplay(name) {
     const displayTarget = document.getElementById('selectedFabric');
@@ -123,7 +132,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
     if (type === 'Swatch') {
       price = radio.getAttribute('data-sample');
-      uomElement.textContent = 'per swatch';
+      uomElement.textContent = 'per sample';
     } else if (type === 'Meterage') {
       const tier1 = radio.getAttribute('data-tier1');
       const tier2 = radio.getAttribute('data-tier2');
@@ -161,7 +170,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
     const nameField = document.querySelector('input[name="Fabric"]');
     const priceField = document.querySelector('input[name="price"]');
-    const widthField = document.querySelector('input[name="fabric-width"]');
+    const widthField = document.querySelector('input[name="Fabric Width"]');
     const weightField = document.getElementById('packageWeight');
     if (nameField) nameField.value = fabricName;
     if (priceField) priceField.value = '';
@@ -207,44 +216,61 @@ window.addEventListener('DOMContentLoaded', function () {
     weightEl.value = perUnitWeightKg.toFixed(2);
   }
 
-  allFabricCards.forEach(wrapper => {
-  wrapper.style.cursor = 'pointer';
-  wrapper.addEventListener('click', function (e) {
-    if (e.target.closest('.design-fabric-view-button')) return;
-    const radio = wrapper.querySelector('input[type="radio"]');
-    if (radio) {
-      radios.forEach(r => r.checked = false);
-      radio.checked = true;
-      updateHiddenInputsFromRadio(radio);
-      updateSelectedFabricDisplay(radio.getAttribute('data-fabric-name') || radio.value);
-      toggleButtonsBasedOnSession();
+  // Central handler for a fabric selection; nudge on user changes only
+  function onFabricSelected(radio, { nudge = true } = {}) {
+    if (!radio) return;
 
-      // Hide border + selection for all cards
-      allFabricCards.forEach(card => {
-        card.style.border = 'none';
-        card.classList.remove('fabric-selected');
-        const selectionEl = card.querySelector('.selection');
-        if (selectionEl) selectionEl.style.display = 'none';
-      });
+    // Update hidden fields & UI
+    updateHiddenInputsFromRadio(radio);
+    updateSelectedFabricDisplay(radio.getAttribute('data-fabric-name') || radio.value);
+    toggleButtonsBasedOnSession();
 
-      // Show border + selection for the clicked card
+    // Clear selection UI
+    allFabricCards.forEach(card => {
+      card.style.border = 'none';
+      card.classList.remove('fabric-selected');
+      const selectionEl = card.querySelector('.selection');
+      if (selectionEl) selectionEl.style.display = 'none';
+    });
+
+    // Mark the selected card
+    const wrapper = radio.closest('.design-fabric');
+    if (wrapper) {
       wrapper.style.border = '1px solid black';
       wrapper.classList.add('fabric-selected');
       const selectionEl = wrapper.querySelector('.selection');
       if (selectionEl) selectionEl.style.display = 'block';
     }
-  });
-});
 
+    // Nudge bar (only on active changes)
+    if (nudge) revealSaveSelection();
+  }
 
-  radios.forEach(radio => {
-    radio.addEventListener('change', () => {
-      updateHiddenInputsFromRadio(radio);
-      updateSelectedFabricDisplay(radio.getAttribute('data-fabric-name') || radio.value);
-      toggleButtonsBasedOnSession();
+  // Card click → set radio and dispatch change (delegated handler will run)
+  allFabricCards.forEach(wrapper => {
+    wrapper.style.cursor = 'pointer';
+    wrapper.addEventListener('click', function (e) {
+      if (e.target.closest('.design-fabric-view-button')) return;
+      const radio = wrapper.querySelector('input[type="radio"][name="fabric"]');
+      if (!radio) return;
+
+      document.querySelectorAll('input[type="radio"][name="fabric"]:checked')
+        .forEach(r => { r.checked = false; });
+
+      radio.checked = true;
+      radio.dispatchEvent(new Event('change', { bubbles: true }));
     });
   });
 
+  // Delegated radio change → always runs, even if DOM is swapped/programmatic
+  document.addEventListener('change', (e) => {
+    const target = e.target;
+    if (target && target.matches('input[type="radio"][name="fabric"]')) {
+      onFabricSelected(target, { nudge: true });
+    }
+  });
+
+  // Quantity changes update pricing and weight
   if (quantityInput) {
     quantityInput.addEventListener('input', () => {
       calculatePackageWeight();
@@ -253,6 +279,7 @@ window.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  // Type changes update pricing
   typeRadios.forEach(radio => {
     radio.addEventListener('change', () => {
       const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
@@ -260,6 +287,7 @@ window.addEventListener('DOMContentLoaded', function () {
     });
   });
 
+  // Colour swatch radios
   const colourRadios = document.querySelectorAll('input[type="radio"][name="Colour"]');
   const imageField = document.querySelector('input[name="image"]');
   const primaryImage = document.getElementById('primary-image');
@@ -281,6 +309,7 @@ window.addEventListener('DOMContentLoaded', function () {
     });
   });
 
+  // Restore selection from sessionStorage (no nudge on restore)
   const selectedFabric = sessionStorage.getItem('selectedFabric');
   let hasRestored = false;
 
@@ -290,33 +319,8 @@ window.addEventListener('DOMContentLoaded', function () {
       const storedName = selectedFabric.trim().toLowerCase();
       if (radioName === storedName) {
         radio.checked = true;
-        updateHiddenInputsFromRadio(radio);
-        updateSelectedFabricDisplay(selectedFabric);
-        toggleButtonsBasedOnSession();
-        allFabricCards.forEach(fabric => {
-          fabric.style.border = 'none';
-          fabric.classList.remove('fabric-selected');
-        });
-        const selectedWrapper = radio.closest('.design-fabric');
-        if (selectedWrapper) {
-          selectedWrapper.style.border = '1px solid black';
-          selectedWrapper.classList.add('fabric-selected');
-        }
-        const tabPane = radio.closest('.w-tab-pane');
-        if (tabPane) {
-          const tabName = tabPane.getAttribute('data-w-tab');
-          const tabComponent = tabPane.closest('.w-tabs');
-          if (tabName && tabComponent) {
-            const allTabLinks = tabComponent.querySelectorAll('.w-tab-link');
-            const allTabPanes = tabComponent.querySelectorAll('.w-tab-pane');
-            allTabLinks.forEach(link => link.classList.remove('w--current'));
-            allTabPanes.forEach(pane => pane.classList.remove('w--tab-active'));
-            const matchingLink = tabComponent.querySelector(`.w-tab-link[data-w-tab="${tabName}"]`);
-            const matchingPane = tabComponent.querySelector(`.w-tab-pane[data-w-tab="${tabName}"]`);
-            if (matchingLink) matchingLink.classList.add('w--current');
-            if (matchingPane) matchingPane.classList.add('w--tab-active');
-          }
-        }
+        onFabricSelected(radio, { nudge: false }); // no nudge on restore
+        // Optional: scroll into view / retab logic (your existing code can remain if needed)
         const fabricWrapper = radio.closest('.design-fabrics');
         const radioWrapper = radio.closest('.design-fabric');
         if (fabricWrapper && radioWrapper) {
@@ -332,9 +336,11 @@ window.addEventListener('DOMContentLoaded', function () {
     toggleButtonsBasedOnSession();
   }
 
+  // If a radio is pre-checked in the DOM, sync state (no nudge)
   const initiallySelected = document.querySelector('input[type="radio"][name="fabric"]:checked');
-  if (initiallySelected) updateHiddenInputsFromRadio(initiallySelected);
+  if (initiallySelected) onFabricSelected(initiallySelected, { nudge: false });
 
+  // Clear session on add to cart if you use that flow
   if (designAddCart) {
     designAddCart.addEventListener('click', () => {
       sessionStorage.removeItem('selectedFabric');
@@ -343,6 +349,7 @@ window.addEventListener('DOMContentLoaded', function () {
   }
 });
 
+// Make entire swatch tile click select its radio (colour)
 document.querySelectorAll('.colour-swatch').forEach(swatch => {
   swatch.style.cursor = 'pointer';
   swatch.addEventListener('click', function (e) {
@@ -355,27 +362,28 @@ document.querySelectorAll('.colour-swatch').forEach(swatch => {
   });
 });
 
-// Quantity field 
-  window.addEventListener('DOMContentLoaded', function () {
-    const quantityInput = document.getElementById('quantity');
+// Quantity field guardrails
+window.addEventListener('DOMContentLoaded', function () {
+  const quantityInput = document.getElementById('quantity');
+  if (!quantityInput) return;
 
-    // Set initial value to 1 if empty or invalid
+  // Set initial value to 1 if empty or invalid
+  if (!quantityInput.value || parseInt(quantityInput.value) < 1) {
+    quantityInput.value = 1;
+  }
+
+  // On blur, reset to 1 if empty or invalid
+  quantityInput.addEventListener('blur', function () {
     if (!quantityInput.value || parseInt(quantityInput.value) < 1) {
       quantityInput.value = 1;
     }
-
-    // On blur, reset to 1 if empty or invalid
-    quantityInput.addEventListener('blur', function () {
-      if (!quantityInput.value || parseInt(quantityInput.value) < 1) {
-        quantityInput.value = 1;
-      }
-    });
-
-    // Optional: Prevent typing zero or negative values
-    quantityInput.addEventListener('input', function () {
-      const value = parseInt(quantityInput.value);
-      if (value < 1 || isNaN(value)) {
-        quantityInput.value = '';
-      }
-    });
   });
+
+  // Prevent zero/negative while typing
+  quantityInput.addEventListener('input', function () {
+    const value = parseInt(quantityInput.value);
+    if (value < 1 || isNaN(value)) {
+      quantityInput.value = '';
+    }
+  });
+});
