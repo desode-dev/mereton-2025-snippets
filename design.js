@@ -230,18 +230,46 @@ window.addEventListener('DOMContentLoaded', function () {
     }
 
     const selectedColourRadio = document.querySelector('input[type="radio"][name="Colour"]:checked');
-    const colourField = document.querySelector('input[type="hidden"][name="Colour"]');
-    const imageField = document.querySelector('input[name="image"]');
-    const primaryImage = document.getElementById('primary-image');
+const colourField = document.querySelector('input[type="hidden"][name="Colour"]');
+const imageField = document.querySelector('input[name="image"]');
+const primaryImage = document.getElementById('primary-image');
 
-    if (selectedColourRadio) {
-      if (colourField) colourField.value = selectedColourRadio.value;
-      const imageUrl = selectedColourRadio.getAttribute('data-image');
-      if (imageUrl) {
-        if (imageField) imageField.value = imageUrl;
-        if (primaryImage) primaryImage.src = imageUrl;
-      }
+function swapPrimaryImageResponsive(imgEl, url) {
+  if (!imgEl || !url) return;
+
+  // If wrapped in a <picture>, update all <source> tags too
+  const pic = imgEl.closest('picture');
+  if (pic) {
+    pic.querySelectorAll('source').forEach(source => {
+      source.setAttribute('srcset', url);
+    });
+  }
+
+  // Update the <img>
+  imgEl.setAttribute('src', url);
+  imgEl.setAttribute('srcset', url); // single candidate works fine
+  imgEl.setAttribute('sizes', '100vw'); // optional, keeps layout predictable
+
+  // Cache-bust if the browser sticks to the old image
+  if (imgEl.currentSrc && !imgEl.currentSrc.includes(url)) {
+    const bust = url + (url.includes('?') ? '&' : '?') + 'v=' + Date.now();
+    imgEl.setAttribute('src', bust);
+    imgEl.setAttribute('srcset', bust);
+    if (pic) {
+      pic.querySelectorAll('source').forEach(s => s.setAttribute('srcset', bust));
     }
+  }
+}
+
+if (selectedColourRadio) {
+  if (colourField) colourField.value = selectedColourRadio.value;
+  const imageUrl = selectedColourRadio.getAttribute('data-image');
+  if (imageUrl) {
+    if (imageField) imageField.value = imageUrl;
+    if (primaryImage) swapPrimaryImageResponsive(primaryImage, imageUrl);
+  }
+}
+
 
     updatePriceDisplayFromRadio(radio);
     calculatePackageWeight();
