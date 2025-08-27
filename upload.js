@@ -10,10 +10,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const canvas = document.getElementById('previewCanvas');
   const ctx = canvas.getContext('2d');
 
-  // ❌ We won't use the single-tile canvas anymore
-  // const singleTileCanvas = document.getElementById('singleTileCanvas');
-  // const singleCtx = singleTileCanvas.getContext('2d');
-
   const fileUrlField = document.getElementById('uploadcare-file-url');
   const fileNameField = document.getElementById('file-name');
   const hiddenWidth = document.getElementById('image-width');
@@ -33,25 +29,23 @@ window.addEventListener('DOMContentLoaded', () => {
   let uploadedImage = new Image();
   let imgLoaded = false;
 
-  // ⭐ NEW: magnifier state
+  // Loupe (magnifier) state — shows REAL physical scale (like SingleTile)
   let lensActive = false;
   let lensX = 0;
   let lensY = 0;
-  const LENS_RADIUS = 90;         // tweak as you like
-  const LENS_BORDER_PX = 2;       // lens ring thickness
+  const LENS_RADIUS = 90;   // adjust as needed
+  const LENS_BORDER_PX = 2; // ring thickness
 
+  // Helpers
   function getRepeatStyle() {
-    // normalize repeat style value (matches your existing logic)
     return document.getElementById('repeatStyle')
       .value.toLowerCase()
       .replace(/\s+/g, '-');
   }
-
   function getUserPpi() {
     const rawPpi = ppiSelect.value;
     return parseFloat(rawPpi) || 300;
   }
-
   function getScale() {
     return parseInt(scaleSlider.value, 10) / 100;
   }
@@ -116,19 +110,17 @@ window.addEventListener('DOMContentLoaded', () => {
     ctx.restore();
   }
 
-  // ⭐ NEW: core tiling routine that can draw at ANY logical scale
+  // Draw tiles using the preview mapping (canvas is 100 cm tall)
   function drawTilesAtScale(logicalScale) {
     const repeatStyle = getRepeatStyle();
     const userPpi = getUserPpi();
 
-    // image physical size (cm) at 100% (logicalScale=1), then apply logicalScale
     const imageWidthCm  = (uploadedImage.width  / userPpi) * 2.54;
     const imageHeightCm = (uploadedImage.height / userPpi) * 2.54;
 
     const scaledImageWidthCm  = imageWidthCm  * logicalScale;
     const scaledImageHeightCm = imageHeightCm * logicalScale;
 
-    // screen mapping: preview canvas is 100 cm tall
     const pxPerCm = canvas.height / 100;
     const tileWidth  = scaledImageWidthCm  * pxPerCm;
     const tileHeight = scaledImageHeightCm * pxPerCm;
@@ -169,59 +161,113 @@ window.addEventListener('DOMContentLoaded', () => {
         break;
       }
       default: {
-        // fallback: single tile
         ctx.drawImage(uploadedImage, 0, 0, tileWidth, tileHeight);
       }
     }
 
-    // update UI bits only when drawing the main view (the caller will handle)
     return { scaledImageWidthCm, scaledImageHeightCm, pxPerCm };
   }
 
-  // ⭐ NEW: full render pass (main pattern + rulers + lens if active)
+  // Draw tiles at REAL physical size (like your old SingleTile: 37.8 px/cm)
+  function drawTilesAtPhysicalScale(scale, pxPerCmPhysical) {
+    const repeatStyle = getRepeatStyle();
+    const userPpi = getUserPpi();
+
+    const imageWidthCm  = (uploadedImage.width  / userPpi) * 2.54 * scale;
+    const imageHeightCm = (uploadedImage.height / userPpi) * 2.54 * scale;
+
+    const tileWidthPx  = imageWidthCm  * pxPerCmPhysical;
+    const tileHeightPx = imageHeightCm * pxPerCmPhysical;
+
+    switch (repeatStyle) {
+      case 'full-drop': {
+        for (let y = -tileHeightPx; y <= canvas.height + tileHeightPx; y += tileHeightPx) {
+          for (let x = -tileWidthPx; x <= canvas.width + tileWidthPx; x += tileWidthPx) {
+            ctx.drawImage(uploadedImage, x, y, tileWidthPx, tileHeightPx);
+          }
+        }
+        break;
+      }
+      case 'half-drop': {
+        for (let x = -tileWidthPx; x <= canvas.width + tileWidthPx * 2; x += tileWidthPx) {
+          const col = Math.floor(x / tileWidthPx);
+          const vOff = (col % 2) * (tileHeightPx / 2);
+          for (let y = -tileHeightPx * 2; y <= canvas.height + tileHeightPx * 2; y += tileHeightPx) {
+            ctx.drawImage(uploadedImage, x, y + vOff, tileWidthPx, tileHeightPx);
+          }
+        }
+        break;
+      }
+      case 'mirror': {
+        for (let y = -tileHeightPx; y <= canvas.height + tileHeightPx; y += tileHeightPx) {
+          for (let x = -tileWidthPx; x <= canvas.width + tileWidthPx; x += tileWidthPx) {
+            const col = Math.floor(x / tileWidthPx);
+            const row = Math.floor(y / tileHeightPx);
+            const flipX = col % 2 === 1;
+            const flipY = row % 2 === 1;
+            ctx.save();
+            ctx.translate(x + (flipX ? tileWidthPx : 0), y + (flipY ? tileHeightPx : 0));
+            ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+            ctx.drawImage(uploadedImage, 0, 0, tileWidthPx, tileHeightPx);
+            ctx.restore();
+          }
+        }
+        break;
+      }
+      default: {
+        ctx.drawImage(uploadedImage, 0, 0, tileWidthPx, tileHeightPx);
+      }
+    }
+  }
+
+  // Full render (preview + rulers + lens)
   function renderAll() {
     const scale = getScale();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const { scaledImageWidthCm, pxPerCm } = drawTilesAtScale(scale);
 
-    // rulers after pattern
     drawRulers(pxPerCm);
 
-    // update hidden fields & labels
     if (hiddenWidth)  hiddenWidth.value  = scaledImageWidthCm.toFixed(2) + 'cm';
     if (hiddenRepeat) hiddenRepeat.value = getRepeatStyle();
     if (hiddenScale)  hiddenScale.value  = scaleSlider.value + '%';
-    imageWidthCmDisplay.textContent = Math.round(scaledImageWidthCm);
+    if (imageWidthCmDisplay) imageWidthCmDisplay.textContent = Math.round(scaledImageWidthCm);
 
-    // lens overlay last
     if (lensActive) drawLens(scale);
   }
 
-  // ⭐ NEW: lens overlay that shows 100% scale at the same world position
+  // Loupe that shows TRUE physical scale (37.8 px/cm) while aligned to the same world point
   function drawLens(currentScale) {
     if (!imgLoaded) return;
 
-    const factor = 1 / currentScale; // how much we need to scale up to get to 100%
+    const PX_PER_CM_PHYSICAL = 37.8;              // 96dpi baseline
+    const pxPerCmPreview = canvas.height / 100;   // your preview mapping
+
+    // Convert cursor px in preview -> world cm
+    const worldX_cm = lensX / pxPerCmPreview;
+    const worldY_cm = lensY / pxPerCmPreview;
+
     ctx.save();
 
-    // clip to circle
+    // Circular clip
     ctx.beginPath();
     ctx.arc(lensX, lensY, LENS_RADIUS, 0, Math.PI * 2);
     ctx.clip();
 
-    // Transform so the point under the cursor stays fixed when we scale
-    // We scale the whole canvas content by `factor`, but translate so that (lensX, lensY)
-    // in the scaled space maps back to (lensX, lensY) on screen.
-    ctx.translate(lensX - lensX * factor, lensY - lensY * factor);
-    ctx.scale(factor, factor);
+    // Where does that world point land in physical pixels?
+    const physX_px = worldX_cm * PX_PER_CM_PHYSICAL;
+    const physY_px = worldY_cm * PX_PER_CM_PHYSICAL;
 
-    // draw tiles at TRUE 100% scale inside the clip
-    drawTilesAtScale(1);
+    // Align it to the lens center
+    ctx.translate(lensX - physX_px, lensY - physY_px);
+
+    // Draw at physical size (includes user's scale)
+    drawTilesAtPhysicalScale(currentScale, PX_PER_CM_PHYSICAL);
 
     ctx.restore();
 
-    // lens ring
+    // Lens ring
     ctx.save();
     ctx.beginPath();
     ctx.arc(lensX, lensY, LENS_RADIUS, 0, Math.PI * 2);
@@ -242,8 +288,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (assumedDpiDisplay) assumedDpiDisplay.textContent = isNaN(userPpi) ? 'N/A' : userPpi;
   }
 
-  // --- UI events -------------------------------------------------------------
-
+  // UI events
   scaleSlider.addEventListener('input', () => {
     scaleValue.textContent = scaleSlider.value;
     if (imgLoaded) {
@@ -259,7 +304,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   ppiSelect.addEventListener('change', () => {
     const isUnsure = ppiSelect.value.toLowerCase() === 'unsure';
-    ppiHelpText.style.display = isUnsure ? 'block' : 'none';
+    if (ppiHelpText) ppiHelpText.style.display = isUnsure ? 'block' : 'none';
     if (!isUnsure && imgLoaded) {
       renderAll();
       calculateDPI();
@@ -270,7 +315,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (imgLoaded) renderAll();
   });
 
-  // ⭐ NEW: lens mouse handlers
+  // Lens handlers
   canvas.addEventListener('mouseenter', (e) => {
     lensActive = true;
     const rect = canvas.getBoundingClientRect();
@@ -292,8 +337,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (imgLoaded) renderAll();
   });
 
-  // --- Upload handling -------------------------------------------------------
-
+  // Upload handling
   const allowedExtensions = ['png', 'jpg', 'jpeg'];
   function isFileTypeAllowed(fileName) {
     return allowedExtensions.includes(fileName.split('.').pop().toLowerCase());
@@ -330,10 +374,11 @@ window.addEventListener('DOMContentLoaded', () => {
     scaleValue.textContent = 100;
 
     updateCanvasSize();
-    renderAll();       // draw initial view
+    renderAll();
     calculateDPI();
   }
 
+  // Init from CMS and render
   const widthFromCMS = printWidthInput.getAttribute('data-width');
   if (widthFromCMS) printWidthInput.value = widthFromCMS;
   updateCanvasSize();
