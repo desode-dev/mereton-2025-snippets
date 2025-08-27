@@ -9,8 +9,11 @@ window.addEventListener('DOMContentLoaded', () => {
   const ppiHelpText = document.getElementById('ppiHelpText');
   const canvas = document.getElementById('previewCanvas');
   const ctx = canvas.getContext('2d');
-  const singleTileCanvas = document.getElementById('singleTileCanvas');
-  const singleCtx = singleTileCanvas.getContext('2d');
+
+  // ❌ We won't use the single-tile canvas anymore
+  // const singleTileCanvas = document.getElementById('singleTileCanvas');
+  // const singleCtx = singleTileCanvas.getContext('2d');
+
   const fileUrlField = document.getElementById('uploadcare-file-url');
   const fileNameField = document.getElementById('file-name');
   const hiddenWidth = document.getElementById('image-width');
@@ -25,16 +28,33 @@ window.addEventListener('DOMContentLoaded', () => {
     addToCartBtn.style.opacity = enabled ? '1' : '0.2';
     addToCartBtn.style.pointerEvents = enabled ? 'auto' : 'none';
   }
-  // Start disabled
   setCartEnabled(false);
 
   let uploadedImage = new Image();
   let imgLoaded = false;
-  let offsetX = 0;
-  let offsetY = 0;
-  let isDragging = false;
-  let dragStartX = 0;
-  let dragStartY = 0;
+
+  // ⭐ NEW: magnifier state
+  let lensActive = false;
+  let lensX = 0;
+  let lensY = 0;
+  const LENS_RADIUS = 90;         // tweak as you like
+  const LENS_BORDER_PX = 2;       // lens ring thickness
+
+  function getRepeatStyle() {
+    // normalize repeat style value (matches your existing logic)
+    return document.getElementById('repeatStyle')
+      .value.toLowerCase()
+      .replace(/\s+/g, '-');
+  }
+
+  function getUserPpi() {
+    const rawPpi = ppiSelect.value;
+    return parseFloat(rawPpi) || 300;
+  }
+
+  function getScale() {
+    return parseInt(scaleSlider.value, 10) / 100;
+  }
 
   function updateCanvasSize() {
     const fabricWidthCM = parseFloat(printWidthInput.value);
@@ -45,9 +65,8 @@ window.addEventListener('DOMContentLoaded', () => {
     canvas.height = previewHeightPx;
 
     if (imgLoaded) {
-      drawPattern();
+      renderAll();
       calculateDPI();
-      drawSingleTile();
     }
   }
 
@@ -76,9 +95,7 @@ window.addEventListener('DOMContentLoaded', () => {
       ctx.moveTo(x, 0);
       ctx.lineTo(x, notchLength);
       ctx.stroke();
-      if (cm % 10 === 0) {
-        ctx.fillText(cm.toString(), x, notchLength + fontSize);
-      }
+      if (cm % 10 === 0) ctx.fillText(cm.toString(), x, notchLength + fontSize);
     }
 
     for (let cm = 0; cm <= totalHeightCM; cm += cmPerNotch) {
@@ -99,81 +116,125 @@ window.addEventListener('DOMContentLoaded', () => {
     ctx.restore();
   }
 
-  function drawPattern() {
-  const scale = parseInt(scaleSlider.value) / 100;
+  // ⭐ NEW: core tiling routine that can draw at ANY logical scale
+  function drawTilesAtScale(logicalScale) {
+    const repeatStyle = getRepeatStyle();
+    const userPpi = getUserPpi();
 
-  // Normalize repeat style to match switch keys
-  const repeatStyle = document.getElementById('repeatStyle').value.toLowerCase().replace(/\s+/g, '-');
+    // image physical size (cm) at 100% (logicalScale=1), then apply logicalScale
+    const imageWidthCm  = (uploadedImage.width  / userPpi) * 2.54;
+    const imageHeightCm = (uploadedImage.height / userPpi) * 2.54;
 
-  // Normalize DPI select (your HTML uses "300 DPI", "Unsure")
-  const rawPpi = ppiSelect.value;
-  const userPpi = parseFloat(rawPpi) || 300;
+    const scaledImageWidthCm  = imageWidthCm  * logicalScale;
+    const scaledImageHeightCm = imageHeightCm * logicalScale;
 
-  const imageWidthCm  = (uploadedImage.width  / userPpi) * 2.54;
-  const imageHeightCm = (uploadedImage.height / userPpi) * 2.54;
+    // screen mapping: preview canvas is 100 cm tall
+    const pxPerCm = canvas.height / 100;
+    const tileWidth  = scaledImageWidthCm  * pxPerCm;
+    const tileHeight = scaledImageHeightCm * pxPerCm;
 
-  const scaledImageWidthCm  = imageWidthCm  * scale;
-  const scaledImageHeightCm = imageHeightCm * scale;
-  const pxPerCm = canvas.height / 100;
-  const tileWidth  = scaledImageWidthCm  * pxPerCm;
-  const tileHeight = scaledImageHeightCm * pxPerCm;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  switch (repeatStyle) {
-    case 'full-drop':
-      for (let y = 0; y <= canvas.height; y += tileHeight) {
-        for (let x = 0; x <= canvas.width; x += tileWidth) {
-          ctx.drawImage(uploadedImage, x, y, tileWidth, tileHeight);
+    switch (repeatStyle) {
+      case 'full-drop': {
+        for (let y = 0; y <= canvas.height; y += tileHeight) {
+          for (let x = 0; x <= canvas.width; x += tileWidth) {
+            ctx.drawImage(uploadedImage, x, y, tileWidth, tileHeight);
+          }
         }
+        break;
       }
-      break;
-
-    case 'half-drop':
-      for (let x = 0; x <= canvas.width + tileWidth; x += tileWidth) {
-        const col = Math.floor(x / tileWidth);
-        const verticalOffset = (col % 2) * (tileHeight / 2);
-        for (let y = -tileHeight; y <= canvas.height + tileHeight; y += tileHeight) {
-          ctx.drawImage(uploadedImage, x, y + verticalOffset, tileWidth, tileHeight);
-        }
-      }
-      break;
-
-    case 'mirror':
-      for (let y = 0; y <= canvas.height; y += tileHeight) {
-        for (let x = 0; x <= canvas.width; x += tileWidth) {
+      case 'half-drop': {
+        for (let x = 0; x <= canvas.width + tileWidth; x += tileWidth) {
           const col = Math.floor(x / tileWidth);
-          const row = Math.floor(y / tileHeight);
-          const flipX = col % 2 === 1;
-          const flipY = row % 2 === 1;
-          ctx.save();
-          ctx.translate(x + (flipX ? tileWidth : 0), y + (flipY ? tileHeight : 0));
-          ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-          ctx.drawImage(uploadedImage, 0, 0, tileWidth, tileHeight);
-          ctx.restore();
+          const vOff = (col % 2) * (tileHeight / 2);
+          for (let y = -tileHeight; y <= canvas.height + tileHeight; y += tileHeight) {
+            ctx.drawImage(uploadedImage, x, y + vOff, tileWidth, tileHeight);
+          }
         }
+        break;
       }
-      break;
+      case 'mirror': {
+        for (let y = 0; y <= canvas.height; y += tileHeight) {
+          for (let x = 0; x <= canvas.width; x += tileWidth) {
+            const col = Math.floor(x / tileWidth);
+            const row = Math.floor(y / tileHeight);
+            const flipX = col % 2 === 1;
+            const flipY = row % 2 === 1;
+            ctx.save();
+            ctx.translate(x + (flipX ? tileWidth : 0), y + (flipY ? tileHeight : 0));
+            ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+            ctx.drawImage(uploadedImage, 0, 0, tileWidth, tileHeight);
+            ctx.restore();
+          }
+        }
+        break;
+      }
+      default: {
+        // fallback: single tile
+        ctx.drawImage(uploadedImage, 0, 0, tileWidth, tileHeight);
+      }
+    }
 
-    default:
-      // Optional: draw a single tile if value is unexpected
-      ctx.drawImage(uploadedImage, 0, 0, tileWidth, tileHeight);
+    // update UI bits only when drawing the main view (the caller will handle)
+    return { scaledImageWidthCm, scaledImageHeightCm, pxPerCm };
   }
 
-  drawRulers(pxPerCm);
+  // ⭐ NEW: full render pass (main pattern + rulers + lens if active)
+  function renderAll() {
+    const scale = getScale();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (hiddenWidth)  hiddenWidth.value  = scaledImageWidthCm.toFixed(2) + 'cm';
-  if (hiddenRepeat) hiddenRepeat.value = repeatStyle; // now normalized
-  if (hiddenScale)  hiddenScale.value  = scaleSlider.value + '%';
+    const { scaledImageWidthCm, pxPerCm } = drawTilesAtScale(scale);
 
-  imageWidthCmDisplay.textContent = Math.round(scaledImageWidthCm);
-}
+    // rulers after pattern
+    drawRulers(pxPerCm);
 
+    // update hidden fields & labels
+    if (hiddenWidth)  hiddenWidth.value  = scaledImageWidthCm.toFixed(2) + 'cm';
+    if (hiddenRepeat) hiddenRepeat.value = getRepeatStyle();
+    if (hiddenScale)  hiddenScale.value  = scaleSlider.value + '%';
+    imageWidthCmDisplay.textContent = Math.round(scaledImageWidthCm);
+
+    // lens overlay last
+    if (lensActive) drawLens(scale);
+  }
+
+  // ⭐ NEW: lens overlay that shows 100% scale at the same world position
+  function drawLens(currentScale) {
+    if (!imgLoaded) return;
+
+    const factor = 1 / currentScale; // how much we need to scale up to get to 100%
+    ctx.save();
+
+    // clip to circle
+    ctx.beginPath();
+    ctx.arc(lensX, lensY, LENS_RADIUS, 0, Math.PI * 2);
+    ctx.clip();
+
+    // Transform so the point under the cursor stays fixed when we scale
+    // We scale the whole canvas content by `factor`, but translate so that (lensX, lensY)
+    // in the scaled space maps back to (lensX, lensY) on screen.
+    ctx.translate(lensX - lensX * factor, lensY - lensY * factor);
+    ctx.scale(factor, factor);
+
+    // draw tiles at TRUE 100% scale inside the clip
+    drawTilesAtScale(1);
+
+    ctx.restore();
+
+    // lens ring
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(lensX, lensY, LENS_RADIUS, 0, Math.PI * 2);
+    ctx.lineWidth = LENS_BORDER_PX;
+    ctx.strokeStyle = '#000';
+    ctx.stroke();
+    ctx.restore();
+  }
 
   function calculateDPI() {
     const printWidthCM = parseFloat(printWidthInput.value);
-    const scale = parseInt(scaleSlider.value) / 100;
-    const userPpi = parseFloat(ppiSelect.value) || 300;
+    const scale = getScale();
+    const userPpi = getUserPpi();
     const printWidthInches = (printWidthCM / 2.54) * scale;
     const dpi = uploadedImage.width / printWidthInches;
 
@@ -181,78 +242,57 @@ window.addEventListener('DOMContentLoaded', () => {
     if (assumedDpiDisplay) assumedDpiDisplay.textContent = isNaN(userPpi) ? 'N/A' : userPpi;
   }
 
-  function drawSingleTile() {
-    const userPpi = parseFloat(ppiSelect.value) || 300;
-    const scale = parseInt(scaleSlider.value) / 100;
-
-    // Convert image resolution to physical cm size
-    const imageWidthCm = (uploadedImage.width / userPpi) * 2.54;
-    const imageHeightCm = (uploadedImage.height / userPpi) * 2.54;
-
-    // Apply user scale
-    const scaledWidthCm = imageWidthCm * scale;
-    const scaledHeightCm = imageHeightCm * scale;
-
-    // Convert physical cm to screen pixels (37.8 px/cm @ 96dpi)
-    const pxPerCm = 37.8;
-    const renderWidthPx = scaledWidthCm * pxPerCm;
-    const renderHeightPx = scaledHeightCm * pxPerCm;
-
-    // Set canvas to target render size
-    singleTileCanvas.width = renderWidthPx;
-    singleTileCanvas.height = renderHeightPx;
-
-    // Draw image scaled to real-world screen size
-    singleCtx.clearRect(0, 0, singleTileCanvas.width, singleTileCanvas.height);
-    singleCtx.drawImage(uploadedImage, 0, 0, renderWidthPx, renderHeightPx);
-
-    // Apply transform for current pan position
-    singleTileCanvas.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
-  }
+  // --- UI events -------------------------------------------------------------
 
   scaleSlider.addEventListener('input', () => {
     scaleValue.textContent = scaleSlider.value;
     if (imgLoaded) {
-      drawPattern();
+      renderAll();
       calculateDPI();
-      drawSingleTile();
     }
   });
 
-  printWidthInput.addEventListener('input', updateCanvasSize);
+  printWidthInput.addEventListener('input', () => {
+    updateCanvasSize();
+    if (imgLoaded) calculateDPI();
+  });
 
   ppiSelect.addEventListener('change', () => {
-  const isUnsure = ppiSelect.value.toLowerCase() === 'unsure';
-  ppiHelpText.style.display = isUnsure ? 'block' : 'none';
-  if (!isUnsure && imgLoaded) {
-    drawPattern();
-    calculateDPI();
-    drawSingleTile();
-  }
-});
+    const isUnsure = ppiSelect.value.toLowerCase() === 'unsure';
+    ppiHelpText.style.display = isUnsure ? 'block' : 'none';
+    if (!isUnsure && imgLoaded) {
+      renderAll();
+      calculateDPI();
+    }
+  });
 
   document.getElementById('repeatStyle').addEventListener('change', () => {
-    if (imgLoaded) drawPattern();
+    if (imgLoaded) renderAll();
   });
 
-  singleTileCanvas.addEventListener('mousedown', (e) => {
-    isDragging = true;
-    dragStartX = e.clientX - offsetX;
-    dragStartY = e.clientY - offsetY;
-    singleTileCanvas.classList.add('dragging');
+  // ⭐ NEW: lens mouse handlers
+  canvas.addEventListener('mouseenter', (e) => {
+    lensActive = true;
+    const rect = canvas.getBoundingClientRect();
+    lensX = e.clientX - rect.left;
+    lensY = e.clientY - rect.top;
+    if (imgLoaded) renderAll();
   });
 
-  document.addEventListener('mouseup', () => {
-    isDragging = false;
-    singleTileCanvas.classList.remove('dragging');
+  canvas.addEventListener('mousemove', (e) => {
+    if (!lensActive) return;
+    const rect = canvas.getBoundingClientRect();
+    lensX = e.clientX - rect.left;
+    lensY = e.clientY - rect.top;
+    if (imgLoaded) renderAll();
   });
 
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    offsetX = e.clientX - dragStartX;
-    offsetY = e.clientY - dragStartY;
-    singleTileCanvas.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+  canvas.addEventListener('mouseleave', () => {
+    lensActive = false;
+    if (imgLoaded) renderAll();
   });
+
+  // --- Upload handling -------------------------------------------------------
 
   const allowedExtensions = ['png', 'jpg', 'jpeg'];
   function isFileTypeAllowed(fileName) {
@@ -264,7 +304,6 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('single-test-upload').addEventListener('fileUploaded', (event) => {
     const { fileUrl, fileName } = event.detail;
 
-    // Before validating, keep the button disabled until we know it's good
     setCartEnabled(false);
 
     if (!isFileTypeAllowed(fileName)) {
@@ -281,8 +320,6 @@ window.addEventListener('DOMContentLoaded', () => {
     uploadedImage.onload = () => {
       imgLoaded = true;
       setupImageForCanvas();
-
-      // Enable Add to Cart after the image is fully loaded/rendered
       setCartEnabled(true);
     };
     uploadedImage.src = fileUrl;
@@ -292,13 +329,9 @@ window.addEventListener('DOMContentLoaded', () => {
     scaleSlider.value = 100;
     scaleValue.textContent = 100;
 
-    // Reset tile preview offsets
-    offsetX = 0;
-    offsetY = 0;
-    singleTileCanvas.style.transform = `translate(0px, 0px)`;
-
     updateCanvasSize();
-    drawSingleTile(); // redraw the full image at actual size
+    renderAll();       // draw initial view
+    calculateDPI();
   }
 
   const widthFromCMS = printWidthInput.getAttribute('data-width');
