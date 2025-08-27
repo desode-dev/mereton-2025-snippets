@@ -169,7 +169,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // Draw tiles at REAL physical size (like SingleTile: 37.8 px/cm),
-  // anchored to a specific world point (anchorPxX/Y) to keep phase consistent.
+  // over exactly the area the lens can show, anchored to the cursor's world point.
   function drawTilesAtPhysicalScale(scale, pxPerCmPhysical, anchorPxX, anchorPxY) {
     const repeatStyle = getRepeatStyle();
     const userPpi = getUserPpi();
@@ -182,26 +182,25 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (!isFinite(tileW) || !isFinite(tileH) || tileW <= 0 || tileH <= 0) return;
 
-    const modSafe = (a, b) => ((a % b) + b) % b;
-    const phaseX = modSafe(anchorPxX, tileW);
-    const phaseY = modSafe(anchorPxY, tileH);
+    // We only need to cover the lens; compute a bounding box around the anchor in PHYSICAL px.
+    const margin = Math.max(tileW, tileH) * 2; // generous overdraw to kill seams
+    const left   = anchorPxX - (LENS_RADIUS + margin);
+    const right  = anchorPxX + (LENS_RADIUS + margin);
+    const top    = anchorPxY - (LENS_RADIUS + margin);
+    const bottom = anchorPxY + (LENS_RADIUS + margin);
 
-    // Overdraw generously to avoid gaps at the lens edge
-    const padX = tileW * 3;
-    const padY = tileH * 3;
-
-    const startX = -phaseX - padX;
-    const startY = -phaseY - padY;
-    const endX = canvas.width + padX;
-    const endY = canvas.height + padY;
-
-    const startCol = Math.floor(startX / tileW);
-    const startRow = Math.floor(startY / tileH);
+    // Determine tile index ranges that intersect the lens bbox.
+    const firstCol = Math.floor(left  / tileW);
+    const lastCol  = Math.floor(right / tileW);
+    const firstRow = Math.floor(top   / tileH);
+    const lastRow  = Math.floor(bottom/ tileH);
 
     switch (repeatStyle) {
       case 'full-drop': {
-        for (let y = startY; y <= endY; y += tileH) {
-          for (let x = startX; x <= endX; x += tileW) {
+        for (let col = firstCol; col <= lastCol; col++) {
+          const x = col * tileW;
+          for (let row = firstRow; row <= lastRow; row++) {
+            const y = row * tileH;
             ctx.drawImage(uploadedImage, x, y, tileW, tileH);
           }
         }
@@ -209,18 +208,25 @@ window.addEventListener('DOMContentLoaded', () => {
       }
 
       case 'half-drop': {
-        for (let x = startX, col = startCol; x <= endX; x += tileW, col++) {
+        for (let col = firstCol - 2; col <= lastCol + 2; col++) {
+          const x = col * tileW;
           const vOff = (col % 2) * (tileH / 2);
-          for (let y = startY - tileH * 2; y <= endY + tileH * 2; y += tileH) {
-            ctx.drawImage(uploadedImage, x, y + vOff, tileW, tileH);
+          // Adjust row coverage to include the vertical offset
+          const adjFirstRow = Math.floor((top - vOff) / tileH) - 2;
+          const adjLastRow  = Math.floor((bottom - vOff) / tileH) + 2;
+          for (let row = adjFirstRow; row <= adjLastRow; row++) {
+            const y = row * tileH + vOff;
+            ctx.drawImage(uploadedImage, x, y, tileW, tileH);
           }
         }
         break;
       }
 
       case 'mirror': {
-        for (let y = startY, row = startRow; y <= endY; y += tileH, row++) {
-          for (let x = startX, col = startCol; x <= endX; x += tileW, col++) {
+        for (let row = firstRow - 2; row <= lastRow + 2; row++) {
+          const y = row * tileH;
+          for (let col = firstCol - 2; col <= lastCol + 2; col++) {
+            const x = col * tileW;
             const flipX = (col & 1) === 1;
             const flipY = (row & 1) === 1;
             ctx.save();
@@ -234,8 +240,10 @@ window.addEventListener('DOMContentLoaded', () => {
       }
 
       default: {
-        for (let y = startY; y <= endY; y += tileH) {
-          for (let x = startX; x <= endX; x += tileW) {
+        for (let col = firstCol; col <= lastCol; col++) {
+          const x = col * tileW;
+          for (let row = firstRow; row <= lastRow; row++) {
+            const y = row * tileH;
             ctx.drawImage(uploadedImage, x, y, tileW, tileH);
           }
         }
@@ -260,11 +268,11 @@ window.addEventListener('DOMContentLoaded', () => {
     if (lensActive) drawLens(scale);
   }
 
-  // Loupe that shows TRUE physical scale (37.8 px/cm) aligned to the same world point
+  // Loupe that shows TRUE physical size (37.8 px/cm) aligned to the same world point
   function drawLens(currentScale) {
     if (!imgLoaded) return;
 
-    const PX_PER_CM_PHYSICAL = 37.8;              // 96dpi baseline
+    const PX_PER_CM_PHYSICAL = 37.8;              // CSS px per cm @96dpi
     const pxPerCmPreview = canvas.height / 100;   // preview mapping (100 cm tall)
 
     // Convert cursor px in preview -> world cm
@@ -383,7 +391,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (fileNameField) fileNameField.value = fileName;
 
     uploadedImage = new Image();
-    uploadedImage.crossOrigin = "Anonymous";
+    //uploadedImage.crossOrigin = "Anonymous";
     uploadedImage.onload = () => {
       imgLoaded = true;
       setupImageForCanvas();
