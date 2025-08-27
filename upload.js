@@ -33,8 +33,8 @@ window.addEventListener('DOMContentLoaded', () => {
   let lensActive = false;
   let lensX = 0;
   let lensY = 0;
-  const LENS_RADIUS = 90;   // adjust as needed
-  const LENS_BORDER_PX = 2; // ring thickness
+  const LENS_RADIUS = 100;   // adjust as needed
+  const LENS_BORDER_PX = 1; // ring thickness
 
   // Helpers
   function getRepeatStyle() {
