@@ -29,7 +29,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let uploadedImage = new Image();
   let imgLoaded = false;
 
-  // Loupe (magnifier) state — shows REAL physical scale (like SingleTile)
+  // Loupe (magnifier) state — shows REAL physical scale
   let lensActive = false;
   let lensX = 0;
   let lensY = 0;
@@ -168,54 +168,77 @@ window.addEventListener('DOMContentLoaded', () => {
     return { scaledImageWidthCm, scaledImageHeightCm, pxPerCm };
   }
 
-  // Draw tiles at REAL physical size (like your old SingleTile: 37.8 px/cm)
-  function drawTilesAtPhysicalScale(scale, pxPerCmPhysical) {
+  // Draw tiles at REAL physical size (like SingleTile: 37.8 px/cm),
+  // anchored to a specific world point (anchorPxX/Y) to keep phase consistent.
+  function drawTilesAtPhysicalScale(scale, pxPerCmPhysical, anchorPxX, anchorPxY) {
     const repeatStyle = getRepeatStyle();
     const userPpi = getUserPpi();
 
     const imageWidthCm  = (uploadedImage.width  / userPpi) * 2.54 * scale;
     const imageHeightCm = (uploadedImage.height / userPpi) * 2.54 * scale;
 
-    const tileWidthPx  = imageWidthCm  * pxPerCmPhysical;
-    const tileHeightPx = imageHeightCm * pxPerCmPhysical;
+    const tileW = imageWidthCm  * pxPerCmPhysical;
+    const tileH = imageHeightCm * pxPerCmPhysical;
+
+    if (!isFinite(tileW) || !isFinite(tileH) || tileW <= 0 || tileH <= 0) return;
+
+    const modSafe = (a, b) => ((a % b) + b) % b;
+    const phaseX = modSafe(anchorPxX, tileW);
+    const phaseY = modSafe(anchorPxY, tileH);
+
+    // Overdraw generously to avoid gaps at the lens edge
+    const padX = tileW * 3;
+    const padY = tileH * 3;
+
+    const startX = -phaseX - padX;
+    const startY = -phaseY - padY;
+    const endX = canvas.width + padX;
+    const endY = canvas.height + padY;
+
+    const startCol = Math.floor(startX / tileW);
+    const startRow = Math.floor(startY / tileH);
 
     switch (repeatStyle) {
       case 'full-drop': {
-        for (let y = -tileHeightPx; y <= canvas.height + tileHeightPx; y += tileHeightPx) {
-          for (let x = -tileWidthPx; x <= canvas.width + tileWidthPx; x += tileWidthPx) {
-            ctx.drawImage(uploadedImage, x, y, tileWidthPx, tileHeightPx);
+        for (let y = startY; y <= endY; y += tileH) {
+          for (let x = startX; x <= endX; x += tileW) {
+            ctx.drawImage(uploadedImage, x, y, tileW, tileH);
           }
         }
         break;
       }
+
       case 'half-drop': {
-        for (let x = -tileWidthPx; x <= canvas.width + tileWidthPx * 2; x += tileWidthPx) {
-          const col = Math.floor(x / tileWidthPx);
-          const vOff = (col % 2) * (tileHeightPx / 2);
-          for (let y = -tileHeightPx * 2; y <= canvas.height + tileHeightPx * 2; y += tileHeightPx) {
-            ctx.drawImage(uploadedImage, x, y + vOff, tileWidthPx, tileHeightPx);
+        for (let x = startX, col = startCol; x <= endX; x += tileW, col++) {
+          const vOff = (col % 2) * (tileH / 2);
+          for (let y = startY - tileH * 2; y <= endY + tileH * 2; y += tileH) {
+            ctx.drawImage(uploadedImage, x, y + vOff, tileW, tileH);
           }
         }
         break;
       }
+
       case 'mirror': {
-        for (let y = -tileHeightPx; y <= canvas.height + tileHeightPx; y += tileHeightPx) {
-          for (let x = -tileWidthPx; x <= canvas.width + tileWidthPx; x += tileWidthPx) {
-            const col = Math.floor(x / tileWidthPx);
-            const row = Math.floor(y / tileHeightPx);
-            const flipX = col % 2 === 1;
-            const flipY = row % 2 === 1;
+        for (let y = startY, row = startRow; y <= endY; y += tileH, row++) {
+          for (let x = startX, col = startCol; x <= endX; x += tileW, col++) {
+            const flipX = (col & 1) === 1;
+            const flipY = (row & 1) === 1;
             ctx.save();
-            ctx.translate(x + (flipX ? tileWidthPx : 0), y + (flipY ? tileHeightPx : 0));
+            ctx.translate(x + (flipX ? tileW : 0), y + (flipY ? tileH : 0));
             ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-            ctx.drawImage(uploadedImage, 0, 0, tileWidthPx, tileHeightPx);
+            ctx.drawImage(uploadedImage, 0, 0, tileW, tileH);
             ctx.restore();
           }
         }
         break;
       }
+
       default: {
-        ctx.drawImage(uploadedImage, 0, 0, tileWidthPx, tileHeightPx);
+        for (let y = startY; y <= endY; y += tileH) {
+          for (let x = startX; x <= endX; x += tileW) {
+            ctx.drawImage(uploadedImage, x, y, tileW, tileH);
+          }
+        }
       }
     }
   }
@@ -237,16 +260,20 @@ window.addEventListener('DOMContentLoaded', () => {
     if (lensActive) drawLens(scale);
   }
 
-  // Loupe that shows TRUE physical scale (37.8 px/cm) while aligned to the same world point
+  // Loupe that shows TRUE physical scale (37.8 px/cm) aligned to the same world point
   function drawLens(currentScale) {
     if (!imgLoaded) return;
 
     const PX_PER_CM_PHYSICAL = 37.8;              // 96dpi baseline
-    const pxPerCmPreview = canvas.height / 100;   // your preview mapping
+    const pxPerCmPreview = canvas.height / 100;   // preview mapping (100 cm tall)
 
     // Convert cursor px in preview -> world cm
     const worldX_cm = lensX / pxPerCmPreview;
     const worldY_cm = lensY / pxPerCmPreview;
+
+    // Where that world point lands in PHYSICAL pixels (real-world px/cm)
+    const physX_px = worldX_cm * PX_PER_CM_PHYSICAL;
+    const physY_px = worldY_cm * PX_PER_CM_PHYSICAL;
 
     ctx.save();
 
@@ -255,15 +282,11 @@ window.addEventListener('DOMContentLoaded', () => {
     ctx.arc(lensX, lensY, LENS_RADIUS, 0, Math.PI * 2);
     ctx.clip();
 
-    // Where does that world point land in physical pixels?
-    const physX_px = worldX_cm * PX_PER_CM_PHYSICAL;
-    const physY_px = worldY_cm * PX_PER_CM_PHYSICAL;
-
-    // Align it to the lens center
+    // Align that physical world point to the lens center
     ctx.translate(lensX - physX_px, lensY - physY_px);
 
-    // Draw at physical size (includes user's scale)
-    drawTilesAtPhysicalScale(currentScale, PX_PER_CM_PHYSICAL);
+    // Draw at physical size, anchored to the same world point
+    drawTilesAtPhysicalScale(currentScale, PX_PER_CM_PHYSICAL, physX_px, physY_px);
 
     ctx.restore();
 
