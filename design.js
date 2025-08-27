@@ -85,10 +85,16 @@ window.addEventListener('DOMContentLoaded', function () {
   const allFabricCards = document.querySelectorAll('.design-fabric');
   const radios = document.querySelectorAll('input[type="radio"][name="fabric"]');
   const quantityInput = document.getElementById('quantity');
-  const typeRadios = document.querySelectorAll('input[name="Type"]');
+
+  // 🔄 CHANGED: use Select instead of Type radios
+  const typeSelect = document.getElementById('Type'); // <select name="Type" id="Type">
+
   const designAddCart = document.getElementById('designAddCart');
-  const largeButtonArrow = document.querySelector('.large-button-arrow');
   const largeButtonChange = document.querySelector('.large-button-change');
+
+  // 🆕 Track & restore .large-button background-image when toggling
+  const largeButton = document.querySelector('.large-button');
+  const initialLargeButtonBg = largeButton ? getComputedStyle(largeButton).backgroundImage : '';
 
   // --- Add to Cart gating (fabric + optional colour) ---
   function setCartEnabled(enabled) {
@@ -118,13 +124,10 @@ window.addEventListener('DOMContentLoaded', function () {
   function nudgeSaveSelection() {
     const el = document.getElementById('saveSelection');
     if (!el) return;
-    // 1) Jump down instantly (no transition)
     el.style.transition = 'none';
     el.style.transform = 'translateY(100%)';
-    // Force a reflow so the browser commits this state
-    void el.offsetHeight;
-    // 2) Restore transition and animate up
-    el.style.transition = ''; // fall back to CSS rule
+    void el.offsetHeight; // reflow
+    el.style.transition = '';
     el.style.transform = 'translateY(0)';
   }
 
@@ -132,19 +135,18 @@ window.addEventListener('DOMContentLoaded', function () {
   document.addEventListener('change', (e) => {
     if (e.target && e.target.matches('input[type="radio"][name="fabric"]')) {
       nudgeSaveSelection();
-      updateCartState(); // keep button state in sync
+      updateCartState();
     }
     if (e.target && e.target.matches('input[type="radio"][name="Colour"]')) {
-      updateCartState(); // colour affects button only if present
+      updateCartState();
     }
   });
 
-  // saveSelection nudge bits (kept for completeness if you still use the class-based version elsewhere)
   const saveSelection = document.getElementById('saveSelection');
   function revealSaveSelection() {
     if (!saveSelection) return;
     saveSelection.classList.remove('is-visible');
-    void saveSelection.offsetWidth; // reflow to retrigger transition
+    void saveSelection.offsetWidth;
     saveSelection.classList.add('is-visible');
   }
 
@@ -154,9 +156,13 @@ window.addEventListener('DOMContentLoaded', function () {
     if (displayTarget) displayTarget.textContent = fabricName;
   }
 
+  // 🔄 CHANGED: when a fabric is selected, show .large-button-change and remove bg from .large-button
   function toggleButtonsBasedOnSession() {
     const hasSelected = !!sessionStorage.getItem('selectedFabric');
     if (largeButtonChange) largeButtonChange.style.display = hasSelected ? 'block' : 'none';
+    if (largeButton) {
+      largeButton.style.backgroundImage = hasSelected ? 'none' : initialLargeButtonBg;
+    }
   }
 
   function formatPrice(value) {
@@ -168,8 +174,9 @@ window.addEventListener('DOMContentLoaded', function () {
     return !value || value.trim() === '' || value === 'NaN';
   }
 
+  // 🔄 CHANGED: uses the Type SELECT value instead of radios
   function updatePriceDisplayFromRadio(radio) {
-    const type = document.querySelector('input[name="Type"]:checked')?.value;
+    const type = typeSelect?.value; // "Swatch" or "Meterage"
     const quantity = parseInt(quantityInput?.value || '1', 10);
     const priceElement = document.getElementById('price');
     const uomElement = document.getElementById('price-uom');
@@ -179,7 +186,7 @@ window.addEventListener('DOMContentLoaded', function () {
     let price = '';
     let showUom = true;
 
-    if (type === 'Swatch') {
+    if (type === 'Sample') {
       price = radio.getAttribute('data-sample');
       uomElement.textContent = 'per sample';
     } else if (type === 'Meterage') {
@@ -230,46 +237,39 @@ window.addEventListener('DOMContentLoaded', function () {
     }
 
     const selectedColourRadio = document.querySelector('input[type="radio"][name="Colour"]:checked');
-const colourField = document.querySelector('input[type="hidden"][name="Colour"]');
-const imageField = document.querySelector('input[name="image"]');
-const primaryImage = document.getElementById('primary-image');
+    const colourField = document.querySelector('input[type="hidden"][name="Colour"]');
+    const imageField = document.querySelector('input[name="image"]');
+    const primaryImage = document.getElementById('primary-image');
 
-function swapPrimaryImageResponsive(imgEl, url) {
-  if (!imgEl || !url) return;
-
-  // If wrapped in a <picture>, update all <source> tags too
-  const pic = imgEl.closest('picture');
-  if (pic) {
-    pic.querySelectorAll('source').forEach(source => {
-      source.setAttribute('srcset', url);
-    });
-  }
-
-  // Update the <img>
-  imgEl.setAttribute('src', url);
-  imgEl.setAttribute('srcset', url); // single candidate works fine
-  imgEl.setAttribute('sizes', '100vw'); // optional, keeps layout predictable
-
-  // Cache-bust if the browser sticks to the old image
-  if (imgEl.currentSrc && !imgEl.currentSrc.includes(url)) {
-    const bust = url + (url.includes('?') ? '&' : '?') + 'v=' + Date.now();
-    imgEl.setAttribute('src', bust);
-    imgEl.setAttribute('srcset', bust);
-    if (pic) {
-      pic.querySelectorAll('source').forEach(s => s.setAttribute('srcset', bust));
+    function swapPrimaryImageResponsive(imgEl, url) {
+      if (!imgEl || !url) return;
+      const pic = imgEl.closest('picture');
+      if (pic) {
+        pic.querySelectorAll('source').forEach(source => {
+          source.setAttribute('srcset', url);
+        });
+      }
+      imgEl.setAttribute('src', url);
+      imgEl.setAttribute('srcset', url);
+      imgEl.setAttribute('sizes', '100vw');
+      if (imgEl.currentSrc && !imgEl.currentSrc.includes(url)) {
+        const bust = url + (url.includes('?') ? '&' : '?') + 'v=' + Date.now();
+        imgEl.setAttribute('src', bust);
+        imgEl.setAttribute('srcset', bust);
+        if (pic) {
+          pic.querySelectorAll('source').forEach(s => s.setAttribute('srcset', bust));
+        }
+      }
     }
-  }
-}
 
-if (selectedColourRadio) {
-  if (colourField) colourField.value = selectedColourRadio.value;
-  const imageUrl = selectedColourRadio.getAttribute('data-image');
-  if (imageUrl) {
-    if (imageField) imageField.value = imageUrl;
-    if (primaryImage) swapPrimaryImageResponsive(primaryImage, imageUrl);
-  }
-}
-
+    if (selectedColourRadio) {
+      if (colourField) colourField.value = selectedColourRadio.value;
+      const imageUrl = selectedColourRadio.getAttribute('data-image');
+      if (imageUrl) {
+        if (imageField) imageField.value = imageUrl;
+        if (primaryImage) swapPrimaryImageResponsive(primaryImage, imageUrl);
+      }
+    }
 
     updatePriceDisplayFromRadio(radio);
     calculatePackageWeight();
@@ -319,14 +319,11 @@ if (selectedColourRadio) {
       if (selectionEl) selectionEl.style.display = 'block';
     }
 
-    // Nudge bar (only on active changes)
     if (nudge) revealSaveSelection();
-
-    // Keep button state correct
     updateCartState();
   }
 
-  // Card click → set radio and dispatch change (delegated handler will run)
+  // Card click → set radio and dispatch change
   allFabricCards.forEach(wrapper => {
     wrapper.style.cursor = 'pointer';
     wrapper.addEventListener('click', function (e) {
@@ -342,7 +339,7 @@ if (selectedColourRadio) {
     });
   });
 
-  // Delegated radio change → always runs, even if DOM is swapped/programmatic
+  // Delegated radio change
   document.addEventListener('change', (e) => {
     const target = e.target;
     if (target && target.matches('input[type="radio"][name="fabric"]')) {
@@ -359,13 +356,13 @@ if (selectedColourRadio) {
     });
   }
 
-  // Type changes update pricing
-  typeRadios.forEach(radio => {
-    radio.addEventListener('change', () => {
+  // 🔄 CHANGED: Type SELECT changes update pricing
+  if (typeSelect) {
+    typeSelect.addEventListener('change', () => {
       const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
       if (selected) updatePriceDisplayFromRadio(selected);
     });
-  });
+  }
 
   // Colour swatch radios
   const colourRadios = document.querySelectorAll('input[type="radio"][name="Colour"]');
@@ -387,7 +384,7 @@ if (selectedColourRadio) {
       const selectedSwatch = radio.closest('.colour-swatch');
       if (selectedSwatch) selectedSwatch.style.border = '1px solid black';
 
-      updateCartState(); // colour selection may unlock the button
+      updateCartState();
     });
   });
 
@@ -401,8 +398,7 @@ if (selectedColourRadio) {
       const storedName = selectedFabric.trim().toLowerCase();
       if (radioName === storedName) {
         radio.checked = true;
-        onFabricSelected(radio, { nudge: false }); // no nudge on restore
-        // Optional: scroll into view / retab logic (your existing code can remain if needed)
+        onFabricSelected(radio, { nudge: false });
         const fabricWrapper = radio.closest('.design-fabrics');
         const radioWrapper = radio.closest('.design-fabric');
         if (fabricWrapper && radioWrapper) {
