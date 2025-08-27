@@ -16,6 +16,10 @@ window.addEventListener('DOMContentLoaded', () => {
   const hiddenRepeat = document.getElementById('repeat-style');
   const hiddenScale = document.getElementById('image-scale');
 
+  // Image-based repeat selector group
+  const repeatGroup = document.getElementById('repeatStyleGroup'); // from your new HTML
+  const legacySelect = document.getElementById('repeatStyle');     // optional fallback if <select> still exists
+
   // Add to Cart button control
   const addToCartBtn = document.getElementById('addToCart');
   function setCartEnabled(enabled) {
@@ -38,10 +42,25 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Helpers
   function getRepeatStyle() {
-    return document.getElementById('repeatStyle')
-      .value.toLowerCase()
-      .replace(/\s+/g, '-');
+    const checked = document.querySelector('input[name="repeatStyle"]:checked');
+    if (checked && checked.value) return checked.value; // "full-drop" | "half-drop" | "mirror"
+    // Fallback to legacy <select> (if present)
+    if (legacySelect) return legacySelect.value.toLowerCase().replace(/\s+/g, '-');
+    return 'full-drop';
   }
+
+  function setRepeatSelectedUI() {
+    if (!repeatGroup) return;
+    const options = repeatGroup.querySelectorAll('.repeat-option');
+    const currentVal = getRepeatStyle();
+    options.forEach(opt => {
+      const isSelected = (opt.dataset.repeat === currentVal);
+      opt.classList.toggle('selected', isSelected);
+      const input = opt.querySelector('input[type="radio"]');
+      if (input) input.checked = isSelected;
+    });
+  }
+
   function getUserPpi() {
     const rawPpi = ppiSelect.value;
     return parseFloat(rawPpi) || 300;
@@ -319,7 +338,41 @@ window.addEventListener('DOMContentLoaded', () => {
     if (assumedDpiDisplay) assumedDpiDisplay.textContent = isNaN(userPpi) ? 'N/A' : userPpi;
   }
 
-  // UI events
+  // --- UI events -------------------------------------------------------------
+
+  // Image radio UI for repeat style
+  if (repeatGroup) {
+    // Click to select
+    repeatGroup.addEventListener('click', (e) => {
+      const label = e.target.closest('.repeat-option');
+      if (!label) return;
+      const input = label.querySelector('input[type="radio"]');
+      if (input) input.checked = true;
+      setRepeatSelectedUI();
+      if (typeof renderAll === 'function') renderAll();
+    });
+
+    // Keyboard (Space/Enter) to select
+    repeatGroup.addEventListener('keydown', (e) => {
+      if (e.key !== ' ' && e.key !== 'Enter') return;
+      const label = e.target.closest('.repeat-option');
+      if (!label) return;
+      e.preventDefault();
+      const input = label.querySelector('input[type="radio"]');
+      if (input) input.checked = true;
+      setRepeatSelectedUI();
+      if (typeof renderAll === 'function') renderAll();
+    });
+  }
+
+  // Keep legacy <select> (if it exists) in sync
+  if (legacySelect) {
+    legacySelect.addEventListener('change', () => {
+      setRepeatSelectedUI();
+      if (imgLoaded) renderAll();
+    });
+  }
+
   scaleSlider.addEventListener('input', () => {
     scaleValue.textContent = scaleSlider.value;
     if (imgLoaded) {
@@ -342,9 +395,14 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  document.getElementById('repeatStyle').addEventListener('change', () => {
-    if (imgLoaded) renderAll();
-  });
+  // If you kept a <select id="repeatStyle"> previously, this keeps renders updating
+  const repeatStyleSelectElem = document.getElementById('repeatStyle');
+  if (repeatStyleSelectElem) {
+    repeatStyleSelectElem.addEventListener('change', () => {
+      setRepeatSelectedUI();
+      if (imgLoaded) renderAll();
+    });
+  }
 
   // Lens handlers
   canvas.addEventListener('mouseenter', (e) => {
@@ -368,7 +426,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (imgLoaded) renderAll();
   });
 
-  // Upload handling
+  // --- Upload handling -------------------------------------------------------
+
   const allowedExtensions = ['png', 'jpg', 'jpeg'];
   function isFileTypeAllowed(fileName) {
     return allowedExtensions.includes(fileName.split('.').pop().toLowerCase());
@@ -391,7 +450,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (fileNameField) fileNameField.value = fileName;
 
     uploadedImage = new Image();
-    //uploadedImage.crossOrigin = "Anonymous";
+    uploadedImage.crossOrigin = "Anonymous";
     uploadedImage.onload = () => {
       imgLoaded = true;
       setupImageForCanvas();
@@ -405,6 +464,7 @@ window.addEventListener('DOMContentLoaded', () => {
     scaleValue.textContent = 100;
 
     updateCanvasSize();
+    setRepeatSelectedUI();   // ensure the selected border matches current value
     renderAll();
     calculateDPI();
   }
@@ -412,5 +472,7 @@ window.addEventListener('DOMContentLoaded', () => {
   // Init from CMS and render
   const widthFromCMS = printWidthInput.getAttribute('data-width');
   if (widthFromCMS) printWidthInput.value = widthFromCMS;
+
+  setRepeatSelectedUI(); // initialize selection border on load
   updateCanvasSize();
 });
