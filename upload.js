@@ -450,7 +450,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (fileNameField) fileNameField.value = fileName;
 
     uploadedImage = new Image();
-    uploadedImage.crossOrigin = "Anonymous";
+   // uploadedImage.crossOrigin = "Anonymous";
     uploadedImage.onload = () => {
       imgLoaded = true;
       setupImageForCanvas();
