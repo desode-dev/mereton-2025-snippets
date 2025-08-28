@@ -16,9 +16,11 @@ window.addEventListener('DOMContentLoaded', () => {
   const hiddenRepeat = document.getElementById('repeat-style');
   const hiddenScale = document.getElementById('image-scale');
 
-  const repeatGroup = document.getElementById('repeatStyleGroup');
-  const legacySelect = document.getElementById('repeatStyle');
+  // Image-based repeat selector group
+  const repeatGroup = document.getElementById('repeatStyleGroup'); // new UI group
+  const legacySelect = document.getElementById('repeatStyle');     // optional fallback
 
+  // Add to Cart button control
   const addToCartBtn = document.getElementById('addToCart');
   function setCartEnabled(enabled) {
     if (!addToCartBtn) return;
@@ -31,26 +33,33 @@ window.addEventListener('DOMContentLoaded', () => {
   let uploadedImage = new Image();
   let imgLoaded = false;
 
-  // NEW: elements that should stay hidden until a file is uploaded
-  const gatedUI = document.querySelectorAll('.product-upload-options, .input-wrap');
-  function setUploadDependentUI(hasFile) {
-    gatedUI.forEach(el => {
-      // use inline style to override existing layout; empty string = default display
-      el.style.display = hasFile ? '' : 'none';
-    });
-  }
-  setUploadDependentUI(false); // hide on load
-
-  // Loupe state
+  // Loupe (magnifier) state — shows REAL physical scale
   let lensActive = false;
   let lensX = 0;
   let lensY = 0;
-  const LENS_RADIUS = 100;
-  const LENS_BORDER_PX = 1;
+  const LENS_RADIUS = 100;   // adjust as needed
+  const LENS_BORDER_PX = 1;  // ring thickness
 
+  // NEW: elements hidden until a file is uploaded
+  const gatedUI = document.querySelectorAll('.product-upload-options, .input-wrap');
+
+  // NEW: canvas area (centered by default; align-start after upload)
+  const canvasArea = document.querySelector('.canvas-area');
+
+  function setUploadDependentUI(hasFile) {
+    gatedUI.forEach(el => {
+      el.style.display = hasFile ? '' : 'none';
+    });
+    if (canvasArea && hasFile) {
+      canvasArea.style.alignItems = 'flex-start';
+    }
+  }
+  setUploadDependentUI(false); // hide on load
+
+  // Helpers
   function getRepeatStyle() {
     const checked = document.querySelector('input[name="repeatStyle"]:checked');
-    if (checked && checked.value) return checked.value;
+    if (checked && checked.value) return checked.value; // "full-drop" | "half-drop" | "mirror"
     if (legacySelect) return legacySelect.value.toLowerCase().replace(/\s+/g, '-');
     return 'full-drop';
   }
@@ -79,13 +88,14 @@ window.addEventListener('DOMContentLoaded', () => {
   function drawPlaceholder() {
     const msg = 'your file will display here';
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // soft background to make it feel intentional (optional)
+
+    // soft background
     ctx.save();
     ctx.fillStyle = '#f7f7f7';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.restore();
 
-    // subtle border (optional)
+    // subtle border
     ctx.save();
     ctx.strokeStyle = '#ddd';
     ctx.lineWidth = 1;
@@ -114,7 +124,6 @@ window.addEventListener('DOMContentLoaded', () => {
       renderAll();
       calculateDPI();
     } else {
-      // NEW: show placeholder whenever canvas is (re)Sized and no image yet
       drawPlaceholder();
     }
   }
@@ -165,6 +174,7 @@ window.addEventListener('DOMContentLoaded', () => {
     ctx.restore();
   }
 
+  // Draw tiles using the preview mapping (canvas is 100 cm tall)
   function drawTilesAtScale(logicalScale) {
     const repeatStyle = getRepeatStyle();
     const userPpi = getUserPpi();
@@ -222,6 +232,8 @@ window.addEventListener('DOMContentLoaded', () => {
     return { scaledImageWidthCm, scaledImageHeightCm, pxPerCm };
   }
 
+  // Draw tiles at REAL physical size (like SingleTile: 37.8 px/cm),
+  // over exactly the area the lens can show, anchored to the cursor's world point.
   function drawTilesAtPhysicalScale(scale, pxPerCmPhysical, anchorPxX, anchorPxY) {
     const repeatStyle = getRepeatStyle();
     const userPpi = getUserPpi();
@@ -231,14 +243,17 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const tileW = imageWidthCm  * pxPerCmPhysical;
     const tileH = imageHeightCm * pxPerCmPhysical;
+
     if (!isFinite(tileW) || !isFinite(tileH) || tileW <= 0 || tileH <= 0) return;
 
-    const margin = Math.max(tileW, tileH) * 2;
+    // We only need to cover the lens; compute a bounding box around the anchor in PHYSICAL px.
+    const margin = Math.max(tileW, tileH) * 2; // generous overdraw to kill seams
     const left   = anchorPxX - (LENS_RADIUS + margin);
     const right  = anchorPxX + (LENS_RADIUS + margin);
     const top    = anchorPxY - (LENS_RADIUS + margin);
     const bottom = anchorPxY + (LENS_RADIUS + margin);
 
+    // Determine tile index ranges that intersect the lens bbox.
     const firstCol = Math.floor(left  / tileW);
     const lastCol  = Math.floor(right / tileW);
     const firstRow = Math.floor(top   / tileH);
@@ -255,10 +270,12 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         break;
       }
+
       case 'half-drop': {
         for (let col = firstCol - 2; col <= lastCol + 2; col++) {
           const x = col * tileW;
           const vOff = (col % 2) * (tileH / 2);
+          // Adjust row coverage to include the vertical offset
           const adjFirstRow = Math.floor((top - vOff) / tileH) - 2;
           const adjLastRow  = Math.floor((bottom - vOff) / tileH) + 2;
           for (let row = adjFirstRow; row <= adjLastRow; row++) {
@@ -268,6 +285,7 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         break;
       }
+
       case 'mirror': {
         for (let row = firstRow - 2; row <= lastRow + 2; row++) {
           const y = row * tileH;
@@ -284,6 +302,7 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         break;
       }
+
       default: {
         for (let col = firstCol; col <= lastCol; col++) {
           const x = col * tileW;
@@ -296,6 +315,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Full render (preview + rulers + lens)
   function renderAll() {
     const scale = getScale();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -312,27 +332,37 @@ window.addEventListener('DOMContentLoaded', () => {
     if (lensActive) drawLens(scale);
   }
 
+  // Loupe that shows TRUE physical size (37.8 px/cm) aligned to the same world point
   function drawLens(currentScale) {
     if (!imgLoaded) return;
 
-    const PX_PER_CM_PHYSICAL = 37.8;
-    const pxPerCmPreview = canvas.height / 100;
+    const PX_PER_CM_PHYSICAL = 37.8;              // CSS px per cm @96dpi
+    const pxPerCmPreview = canvas.height / 100;   // preview mapping (100 cm tall)
 
+    // Convert cursor px in preview -> world cm
     const worldX_cm = lensX / pxPerCmPreview;
     const worldY_cm = lensY / pxPerCmPreview;
 
+    // Where that world point lands in PHYSICAL pixels (real-world px/cm)
     const physX_px = worldX_cm * PX_PER_CM_PHYSICAL;
     const physY_px = worldY_cm * PX_PER_CM_PHYSICAL;
 
     ctx.save();
+
+    // Circular clip
     ctx.beginPath();
     ctx.arc(lensX, lensY, LENS_RADIUS, 0, Math.PI * 2);
     ctx.clip();
 
+    // Align that physical world point to the lens center
     ctx.translate(lensX - physX_px, lensY - physY_px);
+
+    // Draw at physical size, anchored to the same world point
     drawTilesAtPhysicalScale(currentScale, PX_PER_CM_PHYSICAL, physX_px, physY_px);
+
     ctx.restore();
 
+    // Lens ring
     ctx.save();
     ctx.beginPath();
     ctx.arc(lensX, lensY, LENS_RADIUS, 0, Math.PI * 2);
@@ -353,8 +383,11 @@ window.addEventListener('DOMContentLoaded', () => {
     if (assumedDpiDisplay) assumedDpiDisplay.textContent = isNaN(userPpi) ? 'N/A' : userPpi;
   }
 
-  // --- UI events (unchanged) -------------------------------------------------
+  // --- UI events -------------------------------------------------------------
+
+  // Image radio UI for repeat style
   if (repeatGroup) {
+    // Click to select
     repeatGroup.addEventListener('click', (e) => {
       const label = e.target.closest('.repeat-option');
       if (!label) return;
@@ -363,6 +396,8 @@ window.addEventListener('DOMContentLoaded', () => {
       setRepeatSelectedUI();
       if (typeof renderAll === 'function') renderAll();
     });
+
+    // Keyboard (Space/Enter) to select
     repeatGroup.addEventListener('keydown', (e) => {
       if (e.key !== ' ' && e.key !== 'Enter') return;
       const label = e.target.closest('.repeat-option');
@@ -375,6 +410,7 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Keep legacy <select> (if it exists) in sync
   if (legacySelect) {
     legacySelect.addEventListener('change', () => {
       setRepeatSelectedUI();
@@ -404,6 +440,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // If you kept a <select id="repeatStyle"> previously, this keeps renders updating
   const repeatStyleSelectElem = document.getElementById('repeatStyle');
   if (repeatStyleSelectElem) {
     repeatStyleSelectElem.addEventListener('change', () => {
@@ -412,6 +449,7 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Lens handlers
   canvas.addEventListener('mouseenter', (e) => {
     lensActive = true;
     const rect = canvas.getBoundingClientRect();
@@ -434,6 +472,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   // --- Upload handling -------------------------------------------------------
+
   const allowedExtensions = ['png', 'jpg', 'jpeg'];
   function isFileTypeAllowed(fileName) {
     return allowedExtensions.includes(fileName.split('.').pop().toLowerCase());
@@ -456,11 +495,12 @@ window.addEventListener('DOMContentLoaded', () => {
     if (fileNameField) fileNameField.value = fileName;
 
     uploadedImage = new Image();
+    // uploadedImage.crossOrigin = "Anonymous";
     uploadedImage.onload = () => {
       imgLoaded = true;
       setupImageForCanvas();
 
-      // NEW: reveal gated UI after the image is actually ready
+      // Reveal gated UI & align canvas area to top
       setUploadDependentUI(true);
 
       setCartEnabled(true);
@@ -472,8 +512,8 @@ window.addEventListener('DOMContentLoaded', () => {
     scaleSlider.value = 100;
     scaleValue.textContent = 100;
 
-    updateCanvasSize();   // will render image now that imgLoaded = true
-    setRepeatSelectedUI();
+    updateCanvasSize();
+    setRepeatSelectedUI();   // ensure the selected border matches current value
     renderAll();
     calculateDPI();
   }
@@ -482,6 +522,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const widthFromCMS = printWidthInput.getAttribute('data-width');
   if (widthFromCMS) printWidthInput.value = widthFromCMS;
 
-  setRepeatSelectedUI();
-  updateCanvasSize();     // shows placeholder at first load
+  setRepeatSelectedUI(); // initialize selection border on load
+  updateCanvasSize();    // shows placeholder at first load
 });
