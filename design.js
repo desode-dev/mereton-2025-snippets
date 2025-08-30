@@ -96,6 +96,9 @@ window.addEventListener('DOMContentLoaded', function () {
   const largeButton = document.querySelector('.large-button');
   const initialLargeButtonBg = largeButton ? getComputedStyle(largeButton).backgroundImage : '';
 
+  // 🆕 NEW: selected image element (for live + restore updates)
+  const selectedImageEl = document.getElementById('selectedImage'); // << added
+
   // --- Add to Cart gating (fabric + optional colour) ---
   function setCartEnabled(enabled) {
     if (!designAddCart) return;
@@ -221,12 +224,21 @@ window.addEventListener('DOMContentLoaded', function () {
     const fabricName = radio.getAttribute('data-fabric-name') || '';
     const fabricWidth = radio.getAttribute('data-fabric-width') || '';
     const fabricGSM = radio.getAttribute('data-gsm') || '';
+    const fabricImage = radio.getAttribute('data-fabric-image') || ''; // << added
 
     sessionStorage.setItem('selectedFabric', fabricName);
+    // 🆕 Store & show selected fabric image
+    if (fabricImage) {
+      sessionStorage.setItem('selectedFabricImage', fabricImage); // << added
+      if (selectedImageEl) {                                     // << added
+        selectedImageEl.src = fabricImage;
+        selectedImageEl.style.display = 'block';
+      }
+    }
 
     const nameField = document.querySelector('input[name="Fabric"]');
     const priceField = document.querySelector('input[name="price"]');
-    const widthField = document.querySelector('input[name="Fabric Width"]');
+    const widthField = document.querySelector('input[name="Print Width"]');
     const weightField = document.getElementById('packageWeight');
     if (nameField) nameField.value = fabricName;
     if (priceField) priceField.value = '';
@@ -390,6 +402,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
   // Restore selection from sessionStorage (no nudge on restore)
   const selectedFabric = sessionStorage.getItem('selectedFabric');
+  const storedImage = sessionStorage.getItem('selectedFabricImage'); // << added
   let hasRestored = false;
 
   if (selectedFabric) {
@@ -414,6 +427,12 @@ window.addEventListener('DOMContentLoaded', function () {
     toggleButtonsBasedOnSession();
   }
 
+  // 🆕 If we have a stored image (e.g., set on Fabrics page), show it when nothing else has updated it yet
+  if (storedImage && selectedImageEl) {                 // << added
+    selectedImageEl.src = storedImage;
+    selectedImageEl.style.display = 'block';
+  }
+
   // If a radio is pre-checked in the DOM, sync state (no nudge)
   const initiallySelected = document.querySelector('input[type="radio"][name="fabric"]:checked');
   if (initiallySelected) onFabricSelected(initiallySelected, { nudge: false });
@@ -425,6 +444,7 @@ window.addEventListener('DOMContentLoaded', function () {
   if (designAddCart) {
     designAddCart.addEventListener('click', () => {
       sessionStorage.removeItem('selectedFabric');
+      sessionStorage.removeItem('selectedFabricImage'); // << added
       toggleButtonsBasedOnSession();
     });
   }
