@@ -99,6 +99,22 @@ window.addEventListener('DOMContentLoaded', function () {
   // 🆕 NEW: selected image element (for live + restore updates)
   const selectedImageEl = document.getElementById('selectedImage'); // << added
 
+  // 🆕 Helper: keep Print Width in sync with Type (Sample → 30x30cm, else selected fabric width)
+  function updatePrintWidthForType() {
+    const widthField = document.querySelector('input[name="Print Width"]');
+    if (!widthField) return;
+
+    const type = typeSelect?.value;
+    if (type === 'Sample') {
+      widthField.value = '30x30cm';
+    } else {
+      // Revert to the selected fabric's width
+      const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
+      const fabricWidth = selected ? (selected.getAttribute('data-fabric-width') || '') : '';
+      if (fabricWidth) widthField.value = fabricWidth;
+    }
+  }
+
   // --- Add to Cart gating (fabric + optional colour) ---
   function setCartEnabled(enabled) {
     if (!designAddCart) return;
@@ -179,7 +195,7 @@ window.addEventListener('DOMContentLoaded', function () {
 
   // 🔄 CHANGED: uses the Type SELECT value instead of radios
   function updatePriceDisplayFromRadio(radio) {
-    const type = typeSelect?.value; // "Swatch" or "Meterage"
+    const type = typeSelect?.value; // "Sample" or "Meterage"
     const quantity = parseInt(quantityInput?.value || '1', 10);
     const priceElement = document.getElementById('price');
     const uomElement = document.getElementById('price-uom');
@@ -284,6 +300,9 @@ window.addEventListener('DOMContentLoaded', function () {
     }
 
     updatePriceDisplayFromRadio(radio);
+    // 🆕 ensure Print Width reflects Type (Sample → 30x30cm, else fabric width)
+    updatePrintWidthForType();
+
     calculatePackageWeight();
   }
 
@@ -368,11 +387,13 @@ window.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // 🔄 CHANGED: Type SELECT changes update pricing
+  // 🔄 CHANGED: Type SELECT changes update pricing + print width
   if (typeSelect) {
     typeSelect.addEventListener('change', () => {
       const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
       if (selected) updatePriceDisplayFromRadio(selected);
+      // Ensure Print Width flips for Sample → 30x30cm (or reverts)
+      updatePrintWidthForType();
     });
   }
 
@@ -439,6 +460,9 @@ window.addEventListener('DOMContentLoaded', function () {
 
   // Ensure button state is correct after any preselection/restore
   updateCartState();
+
+  // Ensure Print Width is correct on load (handles restored state)
+  updatePrintWidthForType();
 
   // Clear session on add to cart if you use that flow
   if (designAddCart) {
