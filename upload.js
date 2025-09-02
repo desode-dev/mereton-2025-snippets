@@ -471,6 +471,27 @@ window.addEventListener('DOMContentLoaded', () => {
     if (imgLoaded) renderAll();
   });
 
+  // --- Sync "Type" dropdown -> #category -------------------------------------
+const typeSelectEl = document.getElementById('Type') || document.querySelector('select[name="Type"]');
+const categoryInput = document.getElementById('category');
+
+function syncCategoryFromType() {
+  if (!typeSelectEl || !categoryInput) return;
+  // Uses the option's value; to use the label text instead, swap to:
+  // const val = typeSelectEl.selectedOptions?.[0]?.text || '';
+  const val = typeSelectEl.value || '';
+  categoryInput.value = val;
+  categoryInput.dispatchEvent(new Event('input', { bubbles: true }));
+  categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+if (typeSelectEl) {
+  typeSelectEl.addEventListener('change', syncCategoryFromType);
+  typeSelectEl.addEventListener('input', syncCategoryFromType);
+  syncCategoryFromType(); // initial sync on load
+}
+
+
   // --- Upload handling -------------------------------------------------------
 
   const allowedExtensions = ['png', 'jpg', 'jpeg'];

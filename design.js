@@ -89,6 +89,16 @@ window.addEventListener('DOMContentLoaded', function () {
   // 🔄 CHANGED: use Select instead of Type radios
   const typeSelect = document.getElementById('Type'); // <select name="Type" id="Type">
 
+  // --- Sync "Type" -> #category --------------------------------------------
+  const categoryInput = document.getElementById('category');
+  function syncCategoryFromType() {
+    if (!typeSelect || !categoryInput) return;
+    categoryInput.value = typeSelect.value || '';
+    // Fire events so bindings/pipelines pick it up
+    categoryInput.dispatchEvent(new Event('input',  { bubbles: true }));
+    categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
   const designAddCart = document.getElementById('designAddCart');
   const largeButtonChange = document.querySelector('.large-button-change');
 
@@ -387,14 +397,16 @@ window.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // 🔄 CHANGED: Type SELECT changes update pricing + print width
+  // 🔄 CHANGED: Type SELECT changes update pricing + print width + #category mirror
   if (typeSelect) {
-    typeSelect.addEventListener('change', () => {
+    const onTypeChange = () => {
       const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
       if (selected) updatePriceDisplayFromRadio(selected);
-      // Ensure Print Width flips for Sample → 30x30cm (or reverts)
       updatePrintWidthForType();
-    });
+      syncCategoryFromType();
+    };
+    typeSelect.addEventListener('change', onTypeChange);
+    typeSelect.addEventListener('input',  onTypeChange);
   }
 
   // Colour swatch radios
@@ -463,6 +475,9 @@ window.addEventListener('DOMContentLoaded', function () {
 
   // Ensure Print Width is correct on load (handles restored state)
   updatePrintWidthForType();
+
+  // Initial mirror of Type -> #category on load
+  syncCategoryFromType();
 
   // Clear session on add to cart if you use that flow
   if (designAddCart) {
