@@ -431,14 +431,31 @@ window.addEventListener('DOMContentLoaded', () => {
     if (imgLoaded) calculateDPI();
   });
 
-  ppiSelect.addEventListener('change', () => {
-    const isUnsure = ppiSelect.value.toLowerCase() === 'unsure';
-    if (ppiHelpText) ppiHelpText.style.display = isUnsure ? 'block' : 'none';
-    if (!isUnsure && imgLoaded) {
-      renderAll();
-      calculateDPI();
-    }
-  });
+  // --- Sync imagePPI -> #image-quality --------------------------------------
+  const imageQualityInput = document.getElementById('image-quality');
+  function syncImageQualityFromPpi() {
+    if (!ppiSelect || !imageQualityInput) return;
+    imageQualityInput.value = ppiSelect.value || '';
+    // Bubble events so frameworks/form bindings react
+    imageQualityInput.dispatchEvent(new Event('input', { bubbles: true }));
+    imageQualityInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  if (ppiSelect) {
+    ppiSelect.addEventListener('change', () => {
+      const isUnsure = ppiSelect.value.toLowerCase() === 'unsure';
+      if (ppiHelpText) ppiHelpText.style.display = isUnsure ? 'block' : 'none';
+      syncImageQualityFromPpi();
+      if (!isUnsure && imgLoaded) {
+        renderAll();
+        calculateDPI();
+      }
+    });
+    ppiSelect.addEventListener('input', syncImageQualityFromPpi);
+    // initialise on load
+    syncImageQualityFromPpi();
+  }
+  // ---------------------------------------------------------------------------
 
   // If you kept a <select id="repeatStyle"> previously, this keeps renders updating
   const repeatStyleSelectElem = document.getElementById('repeatStyle');
@@ -472,25 +489,24 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   // --- Sync "Type" dropdown -> #category -------------------------------------
-const typeSelectEl = document.getElementById('Type') || document.querySelector('select[name="Type"]');
-const categoryInput = document.getElementById('category');
+  const typeSelectEl = document.getElementById('Type') || document.querySelector('select[name="Type"]');
+  const categoryInput = document.getElementById('category');
 
-function syncCategoryFromType() {
-  if (!typeSelectEl || !categoryInput) return;
-  // Uses the option's value; to use the label text instead, swap to:
-  // const val = typeSelectEl.selectedOptions?.[0]?.text || '';
-  const val = typeSelectEl.value || '';
-  categoryInput.value = val;
-  categoryInput.dispatchEvent(new Event('input', { bubbles: true }));
-  categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
-}
+  function syncCategoryFromType() {
+    if (!typeSelectEl || !categoryInput) return;
+    // Uses the option's value; to use the label text instead, swap to:
+    // const val = typeSelectEl.selectedOptions?.[0]?.text || '';
+    const val = typeSelectEl.value || '';
+    categoryInput.value = val;
+    categoryInput.dispatchEvent(new Event('input', { bubbles: true }));
+    categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
 
-if (typeSelectEl) {
-  typeSelectEl.addEventListener('change', syncCategoryFromType);
-  typeSelectEl.addEventListener('input', syncCategoryFromType);
-  syncCategoryFromType(); // initial sync on load
-}
-
+  if (typeSelectEl) {
+    typeSelectEl.addEventListener('change', syncCategoryFromType);
+    typeSelectEl.addEventListener('input', syncCategoryFromType);
+    syncCategoryFromType(); // initial sync on load
+  }
 
   // --- Upload handling -------------------------------------------------------
 
