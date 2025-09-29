@@ -203,47 +203,80 @@ window.addEventListener('DOMContentLoaded', function () {
     return !value || value.trim() === '' || value === 'NaN';
   }
 
-  // 🔄 CHANGED: uses the Type SELECT value instead of radios
-  function updatePriceDisplayFromRadio(radio) {
-    const type = typeSelect?.value; // "Sample" or "Meterage"
-    const quantity = parseInt(quantityInput?.value || '1', 10);
-    const priceElement = document.getElementById('price');
-    const uomElement = document.getElementById('price-uom');
-    const hiddenPriceField = document.querySelector('input[name="price"]');
-    if (!type || !priceElement || !uomElement) return;
+function updatePriceDisplayFromRadio(radio) {
+  const type = typeSelect?.value; // "Sample" or "Meterage"
+  const quantity = parseInt(quantityInput?.value || '1', 10);
+  const priceElement = document.getElementById('price');
+  const uomElement = document.getElementById('price-uom');
+  const hiddenPriceField = document.querySelector('input[name="price"]');
+  if (!type || !priceElement || !uomElement || !radio) return;
 
-    let price = '';
-    let showUom = true;
+  // Get per-fabric prices
+  const tier1 = radio.getAttribute('data-tier1'); // (may be empty for min fabrics)
+  const tier2 = radio.getAttribute('data-tier2');
+  const tier3 = radio.getAttribute('data-tier3');
 
-    if (type === 'Sample') {
-      price = radio.getAttribute('data-sample');
-      uomElement.textContent = 'per sample';
-    } else if (type === 'Meterage') {
-      const tier1 = radio.getAttribute('data-tier1');
-      const tier2 = radio.getAttribute('data-tier2');
-      const tier3 = radio.getAttribute('data-tier3');
+  // Helper
+  const isEmpty = (v) => !v || v.trim() === '' || v === 'NaN';
+  const formatPrice = (v) => (v && !isNaN(v)) ? `$${parseFloat(v).toFixed(2)}` : v;
 
-      if (isEmpty(tier1) && quantity < 5) {
-        price = 'Minimum 5m required';
-        showUom = false;
+  let price = '';
+  let showUom = true;
+
+  if (type === 'Sample') {
+    const sample = radio.getAttribute('data-sample');
+    price = sample;
+    uomElement.textContent = 'per sample';
+  } else if (type === 'Meterage') {
+    // Determine minimum meters for THIS fabric:
+    // Prefer an explicit data-min="5" or "10" on the radio; else:
+    // - If tier1 is empty, assume 5 m min (legacy fallback)
+    // - Otherwise, no minimum (1 m)
+    const explicitMin = parseInt(radio.getAttribute('data-min'), 10);
+    const minRequired = Number.isFinite(explicitMin)
+      ? explicitMin
+      : (isEmpty(tier1) ? 5 : 1);
+
+    // Under minimum → show message
+    if (quantity < minRequired) {
+      price = `Minimum ${minRequired}m required`;
+      showUom = false;
+    } else {
+      // Tier3 for 50+
+      if (quantity >= 50 && !isEmpty(tier3)) {
+        price = tier3;
       } else {
-        if (quantity >= 6 && quantity <= 50 && !isEmpty(tier2)) {
-          price = tier2;
-        } else if (quantity > 50 && !isEmpty(tier3)) {
-          price = tier3;
+        if (minRequired === 1) {
+          // No minimum: Tier1 for 1–5 (inclusive), Tier2 for 6–49
+          if (quantity <= 5 && !isEmpty(tier1)) {
+            price = tier1;
+          } else if (!isEmpty(tier2)) {
+            price = tier2;
+          } else {
+            price = tier1; // graceful fallback
+          }
         } else {
-          price = tier1;
+          // Has minimum (5 or 10): Tier2 from minRequired up to 49
+          price = !isEmpty(tier2) ? tier2 : '';
         }
-        uomElement.textContent = 'per meter';
       }
-    }
-
-    priceElement.textContent = price.includes('Minimum') ? price : formatPrice(price);
-    uomElement.style.display = showUom ? 'inline' : 'none';
-    if (hiddenPriceField) {
-      hiddenPriceField.value = price.includes('Minimum') ? '' : parseFloat(price).toFixed(2);
+      uomElement.textContent = 'per meter';
     }
   }
+
+  // Apply UI
+  priceElement.textContent = (typeof price === 'string' && price.includes('Minimum'))
+    ? price
+    : formatPrice(price);
+
+  uomElement.style.display = showUom ? 'inline' : 'none';
+  if (hiddenPriceField) {
+    hiddenPriceField.value = (typeof price === 'string' && price.includes('Minimum'))
+      ? ''
+      : (price ? parseFloat(price).toFixed(2) : '');
+  }
+}
+
 
   function updateHiddenInputsFromRadio(radio) {
     if (!radio) return;
