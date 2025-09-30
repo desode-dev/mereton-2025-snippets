@@ -1,6 +1,51 @@
-// ===============================
-// Scale slider → background scaling + floating output
-// ===============================
+/* =========================================================
+   Global helpers for thumbnail + primary image handling
+   ========================================================= */
+function swapPrimaryImageResponsiveGlobal(imgEl, url) {
+  if (!imgEl || !url) return;
+  const pic = imgEl.closest('picture');
+  if (pic) {
+    pic.querySelectorAll('source').forEach(source => {
+      source.setAttribute('srcset', url);
+    });
+  }
+  imgEl.setAttribute('src', url);
+  imgEl.setAttribute('srcset', url);
+  imgEl.setAttribute('sizes', '100vw');
+  if (imgEl.currentSrc && !imgEl.currentSrc.includes(url)) {
+    const bust = url + (url.includes('?') ? '&' : '?') + 'v=' + Date.now();
+    imgEl.setAttribute('src', bust);
+    imgEl.setAttribute('srcset', bust);
+    if (pic) {
+      pic.querySelectorAll('source').forEach(s => s.setAttribute('srcset', bust));
+    }
+  }
+}
+
+function setPrimaryImageAll(url) {
+  if (!url) return;
+  // background-based viewers
+  document.querySelectorAll('.product-viewer-mini').forEach(el => {
+    el.style.backgroundImage = `url('${url}')`;
+  });
+  document.querySelectorAll('.product-viewer-window').forEach(el => {
+    el.style.backgroundImage = `url('${url}')`;
+  });
+  // optional <img id="primary-image">
+  const primaryImage = document.getElementById('primary-image');
+  if (primaryImage) swapPrimaryImageResponsiveGlobal(primaryImage, url);
+}
+
+function markActiveThumb(thumbEl) {
+  document.querySelectorAll('.product-viewer-thumb, .change-viewer-thumb').forEach(t => {
+    t.style.border = 'none';
+  });
+  if (thumbEl) thumbEl.style.border = '1px solid black';
+}
+
+/* =========================================================
+   Scale slider → background scaling + floating output
+   ========================================================= */
 document.getElementById('scaleSlider')?.addEventListener('input', function () {
   let scaleValue = this.value;
 
@@ -31,27 +76,27 @@ document.getElementById('scaleSlider')?.addEventListener('input', function () {
   });
 });
 
-// ===============================
-// Thumbnail click → change viewer images
-// ===============================
-document.querySelectorAll('.change-viewer-thumb').forEach(function(thumb) {
-  thumb.addEventListener('click', function() {
-    let newimg = this.getAttribute('src');
-
-    document.querySelectorAll('.product-viewer-mini').forEach(function(mini) {
-      mini.style.backgroundImage = `url('${newimg}')`;
-    });
-
-    document.querySelectorAll('.product-viewer-window').forEach(function(window) {
-      window.style.backgroundImage = `url('${newimg}')`;
-    });
+/* =========================================================
+   Thumbnails: click → change main image (+ border)
+   Supports both .product-viewer-thumb and .change-viewer-thumb
+   ========================================================= */
+document.querySelectorAll('.product-viewer-thumb, .change-viewer-thumb').forEach(function (thumb) {
+  thumb.style.cursor = 'pointer';
+  thumb.addEventListener('click', function () {
+    const imgEl = (this.tagName.toLowerCase() === 'img') ? this : this.querySelector('img');
+    const url = this.getAttribute('data-large')
+             || imgEl?.getAttribute('data-large')
+             || imgEl?.getAttribute('src');
+    if (!url) return;
+    setPrimaryImageAll(url);
+    markActiveThumb(this);
   });
 });
 
-// ===============================
-// Display colour names under thumbs
-// ===============================
-document.querySelectorAll('.product-viewer-thumb').forEach(function(thumb) {
+/* =========================================================
+   Display colour names under thumbs
+   ========================================================= */
+document.querySelectorAll('.product-viewer-thumb').forEach(function (thumb) {
   const img = thumb.querySelector('img');
   if (img) {
     const src = img.getAttribute('src');
@@ -60,13 +105,11 @@ document.querySelectorAll('.product-viewer-thumb').forEach(function(thumb) {
     const serviceTitle = document.querySelector('.service-title')?.textContent.trim() || '';
     let nameWithoutServiceTitle = imageName.replace(serviceTitle + '-', '');
     nameWithoutServiceTitle = nameWithoutServiceTitle.replace(/-\d+$/, '');
-
     const capitalizedName = nameWithoutServiceTitle
       .toLowerCase()
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
-
     const colourNameElement = thumb.querySelector('.product-viewer-colour-name');
     if (colourNameElement) {
       colourNameElement.textContent = capitalizedName;
@@ -74,21 +117,20 @@ document.querySelectorAll('.product-viewer-thumb').forEach(function(thumb) {
   }
 });
 
-// ===============================
-// Webflow slider-thumbs sync (uses jQuery from Webflow)
-// ===============================
-Webflow.push(function() {
-  $('[data-thumbs-for]').on('click', '.w-slide', function() {
+/* =========================================================
+   Webflow slider-thumbs sync (uses jQuery from Webflow)
+   ========================================================= */
+Webflow.push(function () {
+  $('[data-thumbs-for]').on('click', '.w-slide', function () {
     var target = $($(this).parents('.w-slider').attr('data-thumbs-for'));
     if (target.length == 0) return;
     target.find('.w-slider-nav').children().eq($(this).index()).trigger('tap');
   });
 });
 
-
-// ===============================
-// Fabric Selection + Save Nudge + Add-to-Cart Gating
-// ===============================
+/* =========================================================
+   Fabric Selection + Save Nudge + Pricing + Cart Gating
+   ========================================================= */
 window.addEventListener('DOMContentLoaded', function () {
   const allFabricCards = document.querySelectorAll('.design-fabric');
   const radios = document.querySelectorAll('input[type="radio"][name="fabric"]');
@@ -105,11 +147,11 @@ window.addEventListener('DOMContentLoaded', function () {
   function syncCategoryFromType() {
     if (!typeSelect || !categoryInput) return;
     categoryInput.value = typeSelect.value || '';
-    categoryInput.dispatchEvent(new Event('input',  { bubbles: true }));
+    categoryInput.dispatchEvent(new Event('input', { bubbles: true }));
     categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  // --- Add to Cart gating (kept your existing greying/disable function) ---
+  // --- Add to Cart gating (use existing grey-out/disable) ---
   function setCartEnabled(enabled) {
     if (!designAddCart) return;
     designAddCart.disabled = !enabled;
@@ -127,27 +169,21 @@ window.addEventListener('DOMContentLoaded', function () {
     return !!document.querySelector('input[type="radio"][name="Colour"]:checked');
   }
 
-  // 👉 NEW: compute minimum for the current selection (1 | 5 | 10)
+  // Compute minimum for the current selection (1 | 5 | 10)
   function getMinRequiredForSelected() {
     const type = typeSelect?.value;
     if (type !== 'Meterage') return 1;
-
     const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
     if (!selected) return 1;
-
-    // Prefer explicit data-min="5" | "10"
     const explicitMin = parseInt(selected.getAttribute('data-min'), 10);
     if (Number.isFinite(explicitMin) && explicitMin > 1) return explicitMin;
-
-    // Fallback: if Tier1 is empty, treat as 5 m minimum; else no minimum
     const tier1 = (selected.getAttribute('data-tier1') || '').trim();
     return tier1 === '' ? 5 : 1;
   }
 
-  // 👉 UPDATED: Add-to-cart is also gated by meeting the min qty when Metres
+  // Gating includes meeting the min when "Metres"
   function updateCartState() {
     const baseOk = isFabricSelected() && (!isColourRequired() || isColourSelected());
-
     let qtyOk = true;
     const type = typeSelect?.value;
     if (type === 'Meterage') {
@@ -155,11 +191,10 @@ window.addEventListener('DOMContentLoaded', function () {
       const q = parseInt(quantityInput?.value || '0', 10) || 0;
       qtyOk = q >= minRequired;
     }
-
     setCartEnabled(baseOk && qtyOk);
   }
 
-  // --- Save selection nudges/animations ---
+  // Save selection nudges/animations
   function nudgeSaveSelection() {
     const el = document.getElementById('saveSelection');
     if (!el) return;
@@ -205,7 +240,6 @@ window.addEventListener('DOMContentLoaded', function () {
   function updatePrintWidthForType() {
     const widthField = document.querySelector('input[name="Print Width"]');
     if (!widthField) return;
-
     const type = typeSelect?.value;
     if (type === 'Sample') {
       widthField.value = '30x30cm';
@@ -216,7 +250,10 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // 👉 UPDATED: pricing picks correct tier with min logic (1–5 Tier1 for no-min; 5+ or 10+ Tier2 when min)
+  // Pricing picks correct tier with min logic
+  // - No min: Tier1 for 1–5, Tier2 for 6–49, Tier3 for 50+
+  // - 5 min:  Tier2 for 5–49, Tier3 for 50+
+  // - 10 min: Tier2 for 10–49, Tier3 for 50+
   function updatePriceDisplayFromRadio(radio) {
     const type = typeSelect?.value; // "Sample" or "Meterage"
     const quantity = parseInt(quantityInput?.value || '1', 10);
@@ -229,7 +266,6 @@ window.addEventListener('DOMContentLoaded', function () {
     const tier2 = radio.getAttribute('data-tier2');
     const tier3 = radio.getAttribute('data-tier3');
 
-    // Determine min for THIS fabric
     const explicitMin = parseInt(radio.getAttribute('data-min'), 10);
     const minRequired = Number.isFinite(explicitMin) ? explicitMin : (isEmpty(tier1) ? 5 : 1);
 
@@ -245,9 +281,8 @@ window.addEventListener('DOMContentLoaded', function () {
         price = `Minimum ${minRequired}m required`;
         showUom = false;
       } else {
-        // Tier 3 for 50+
         if (quantity >= 50 && !isEmpty(tier3)) {
-          price = tier3;
+          price = tier3; // Tier3 for 50+
         } else {
           if (minRequired === 1) {
             // No minimum: Tier1 for 1–5, Tier2 for 6–49
@@ -297,10 +332,10 @@ window.addEventListener('DOMContentLoaded', function () {
       }
     }
 
-    const nameField  = document.querySelector('input[name="Fabric"]');
-    const priceField = document.querySelector('input[name="price"]');
-    const widthField = document.querySelector('input[name="Print Width"]');
-    const weightField= document.getElementById('packageWeight');
+    const nameField   = document.querySelector('input[name="Fabric"]');
+    const priceField  = document.querySelector('input[name="price"]');
+    const widthField  = document.querySelector('input[name="Print Width"]');
+    const weightField = document.getElementById('packageWeight');
 
     if (nameField)  nameField.value  = fabricName;
     if (priceField) priceField.value = '';
@@ -343,6 +378,7 @@ window.addEventListener('DOMContentLoaded', function () {
       if (imageUrl) {
         if (imageField) imageField.value = imageUrl;
         if (primaryImage) swapPrimaryImageResponsive(primaryImage, imageUrl);
+        setPrimaryImageAll(imageUrl); // keep main viewer in sync
       }
     }
 
@@ -423,6 +459,8 @@ window.addEventListener('DOMContentLoaded', function () {
     }
     if (target && target.matches('input[type="radio"][name="Colour"]')) {
       updateCartState();
+      const imageUrl = target.getAttribute('data-image');
+      if (imageUrl) setPrimaryImageAll(imageUrl); // sync main viewer on swatch change
     }
   });
 
@@ -447,7 +485,7 @@ window.addEventListener('DOMContentLoaded', function () {
       applyQtyMin(); // also update the input's min/value for the current type/fabric
     };
     typeSelect.addEventListener('change', onTypeChange);
-    typeSelect.addEventListener('input',  onTypeChange);
+    typeSelect.addEventListener('input', onTypeChange);
   }
 
   // Restore selection from sessionStorage (no nudge on restore)
@@ -477,7 +515,7 @@ window.addEventListener('DOMContentLoaded', function () {
     toggleButtonsBasedOnSession();
   }
 
-  // If we have a stored image (e.g., set on Fabrics page), show it when nothing else has updated it yet
+  // If we have a stored image, show it when nothing else has updated it yet
   if (storedImage && selectedImageEl) {
     selectedImageEl.src = storedImage;
     selectedImageEl.style.display = 'block';
@@ -505,20 +543,14 @@ window.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // ===============================
-  // Quantity field guardrails (respect per-fabric mins)
-  // ===============================
+  /* =========================================
+     Quantity field guardrails (respect mins)
+     ========================================= */
   function applyQtyMin() {
     if (!quantityInput) return;
-
-    // Determine current min based on Type + selected fabric
     const type = typeSelect?.value;
     const minRequired = (type === 'Meterage') ? getMinRequiredForSelected() : 1;
-
-    // Apply min attr
     quantityInput.min = String(minRequired);
-
-    // If empty or below min, set to min; otherwise leave user's value
     const val = parseInt(quantityInput.value || '0', 10);
     if (!Number.isFinite(val) || val < minRequired) {
       quantityInput.value = String(minRequired);
@@ -535,10 +567,9 @@ window.addEventListener('DOMContentLoaded', function () {
   });
 }); // end DOMContentLoaded (main)
 
-
-// ===============================
-// Make entire swatch tile click select its radio (colour)
-// ===============================
+/* =========================================================
+   Make entire swatch tile click select its radio (colour)
+   ========================================================= */
 document.querySelectorAll('.colour-swatch').forEach(swatch => {
   swatch.style.cursor = 'pointer';
   swatch.addEventListener('click', function (e) {
@@ -551,10 +582,9 @@ document.querySelectorAll('.colour-swatch').forEach(swatch => {
   });
 });
 
-
-// ===============================
-// Legacy Quantity guard (kept compatible, but main min logic now in applyQtyMin())
-// ===============================
+/* =========================================================
+   Legacy Quantity guard (compatible; main min logic in applyQtyMin())
+   ========================================================= */
 window.addEventListener('DOMContentLoaded', function () {
   const quantityInput = document.getElementById('quantity');
   if (!quantityInput) return;
