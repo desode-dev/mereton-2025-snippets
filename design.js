@@ -44,6 +44,17 @@ function markActiveThumb(thumbEl) {
 }
 
 /* =========================================================
+   NEW: Colour swatch border helper
+   ========================================================= */
+function updateColourSwatchBorders(radioEl) {
+  document.querySelectorAll('.colour-swatch').forEach(swatch => {
+    swatch.style.border = 'none';
+  });
+  const swatch = radioEl?.closest('.colour-swatch');
+  if (swatch) swatch.style.border = '1px solid black';
+}
+
+/* =========================================================
    Scale slider → background scaling + floating output
    ========================================================= */
 document.getElementById('scaleSlider')?.addEventListener('input', function () {
@@ -380,6 +391,8 @@ window.addEventListener('DOMContentLoaded', function () {
         if (primaryImage) swapPrimaryImageResponsive(primaryImage, imageUrl);
         setPrimaryImageAll(imageUrl); // keep main viewer in sync
       }
+      // ensure border reflects currently-checked swatch
+      updateColourSwatchBorders(selectedColourRadio);
     }
 
     updatePriceDisplayFromRadio(radio);
@@ -451,16 +464,20 @@ window.addEventListener('DOMContentLoaded', function () {
     });
   });
 
-  // Delegated radio change
+  // Delegated radio change (fabric & colour)
   document.addEventListener('change', (e) => {
     const target = e.target;
     if (target && target.matches('input[type="radio"][name="fabric"]')) {
       onFabricSelected(target, { nudge: true });
     }
     if (target && target.matches('input[type="radio"][name="Colour"]')) {
-      updateCartState();
+      // border highlight on the chosen colour swatch
+      updateColourSwatchBorders(target);
+      // keep main image in sync
       const imageUrl = target.getAttribute('data-image');
-      if (imageUrl) setPrimaryImageAll(imageUrl); // sync main viewer on swatch change
+      if (imageUrl) setPrimaryImageAll(imageUrl);
+      // re-check cart gating (colour may be required)
+      updateCartState();
     }
   });
 
@@ -525,6 +542,10 @@ window.addEventListener('DOMContentLoaded', function () {
   const initiallySelected = document.querySelector('input[type="radio"][name="fabric"]:checked');
   if (initiallySelected) onFabricSelected(initiallySelected, { nudge: false });
 
+  // If a colour is already checked on load, ensure its border is visible
+  const initiallyCheckedColour = document.querySelector('input[type="radio"][name="Colour"]:checked');
+  if (initiallyCheckedColour) updateColourSwatchBorders(initiallyCheckedColour);
+
   // Ensure button state is correct after any preselection/restore
   updateCartState();
 
@@ -535,8 +556,9 @@ window.addEventListener('DOMContentLoaded', function () {
   syncCategoryFromType();
 
   // Clear session on add to cart if you use that flow
-  if (designAddCart) {
-    designAddCart.addEventListener('click', () => {
+  const designAddCartBtn = designAddCart; // alias, just in case
+  if (designAddCartBtn) {
+    designAddCartBtn.addEventListener('click', () => {
       sessionStorage.removeItem('selectedFabric');
       sessionStorage.removeItem('selectedFabricImage');
       toggleButtonsBasedOnSession();
