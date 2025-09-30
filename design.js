@@ -1,5 +1,7 @@
+// ===============================
 // Scale slider → background scaling + floating output
-document.getElementById('scaleSlider').addEventListener('input', function () {
+// ===============================
+document.getElementById('scaleSlider')?.addEventListener('input', function () {
   let scaleValue = this.value;
 
   // Convert: 100 → 50%, 200 → 100%
@@ -29,7 +31,9 @@ document.getElementById('scaleSlider').addEventListener('input', function () {
   });
 });
 
+// ===============================
 // Thumbnail click → change viewer images
+// ===============================
 document.querySelectorAll('.change-viewer-thumb').forEach(function(thumb) {
   thumb.addEventListener('click', function() {
     let newimg = this.getAttribute('src');
@@ -44,7 +48,9 @@ document.querySelectorAll('.change-viewer-thumb').forEach(function(thumb) {
   });
 });
 
+// ===============================
 // Display colour names under thumbs
+// ===============================
 document.querySelectorAll('.product-viewer-thumb').forEach(function(thumb) {
   const img = thumb.querySelector('img');
   if (img) {
@@ -68,7 +74,9 @@ document.querySelectorAll('.product-viewer-thumb').forEach(function(thumb) {
   }
 });
 
-// Webflow slider-thumbs sync
+// ===============================
+// Webflow slider-thumbs sync (uses jQuery from Webflow)
+// ===============================
 Webflow.push(function() {
   $('[data-thumbs-for]').on('click', '.w-slide', function() {
     var target = $($(this).parents('.w-slider').attr('data-thumbs-for'));
@@ -85,47 +93,23 @@ window.addEventListener('DOMContentLoaded', function () {
   const allFabricCards = document.querySelectorAll('.design-fabric');
   const radios = document.querySelectorAll('input[type="radio"][name="fabric"]');
   const quantityInput = document.getElementById('quantity');
-
-  // 🔄 CHANGED: use Select instead of Type radios
   const typeSelect = document.getElementById('Type'); // <select name="Type" id="Type">
+  const designAddCart = document.getElementById('designAddCart');
+  const largeButtonChange = document.querySelector('.large-button-change');
+  const largeButton = document.querySelector('.large-button');
+  const initialLargeButtonBg = largeButton ? getComputedStyle(largeButton).backgroundImage : '';
+  const selectedImageEl = document.getElementById('selectedImage'); // optional
 
   // --- Sync "Type" -> #category --------------------------------------------
   const categoryInput = document.getElementById('category');
   function syncCategoryFromType() {
     if (!typeSelect || !categoryInput) return;
     categoryInput.value = typeSelect.value || '';
-    // Fire events so bindings/pipelines pick it up
     categoryInput.dispatchEvent(new Event('input',  { bubbles: true }));
     categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  const designAddCart = document.getElementById('designAddCart');
-  const largeButtonChange = document.querySelector('.large-button-change');
-
-  // 🆕 Track & restore .large-button background-image when toggling
-  const largeButton = document.querySelector('.large-button');
-  const initialLargeButtonBg = largeButton ? getComputedStyle(largeButton).backgroundImage : '';
-
-  // 🆕 NEW: selected image element (for live + restore updates)
-  const selectedImageEl = document.getElementById('selectedImage'); // << added
-
-  // 🆕 Helper: keep Print Width in sync with Type (Sample → 30x30cm, else selected fabric width)
-  function updatePrintWidthForType() {
-    const widthField = document.querySelector('input[name="Print Width"]');
-    if (!widthField) return;
-
-    const type = typeSelect?.value;
-    if (type === 'Sample') {
-      widthField.value = '30x30cm';
-    } else {
-      // Revert to the selected fabric's width
-      const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
-      const fabricWidth = selected ? (selected.getAttribute('data-fabric-width') || '') : '';
-      if (fabricWidth) widthField.value = fabricWidth;
-    }
-  }
-
-  // --- Add to Cart gating (fabric + optional colour) ---
+  // --- Add to Cart gating (kept your existing greying/disable function) ---
   function setCartEnabled(enabled) {
     if (!designAddCart) return;
     designAddCart.disabled = !enabled;
@@ -142,14 +126,40 @@ window.addEventListener('DOMContentLoaded', function () {
   function isColourSelected() {
     return !!document.querySelector('input[type="radio"][name="Colour"]:checked');
   }
-  function updateCartState() {
-    const ok = isFabricSelected() && (!isColourRequired() || isColourSelected());
-    setCartEnabled(ok);
-  }
-  // Start disabled
-  setCartEnabled(false);
 
-  // Nudge #saveSelection on every fabric change
+  // 👉 NEW: compute minimum for the current selection (1 | 5 | 10)
+  function getMinRequiredForSelected() {
+    const type = typeSelect?.value;
+    if (type !== 'Meterage') return 1;
+
+    const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
+    if (!selected) return 1;
+
+    // Prefer explicit data-min="5" | "10"
+    const explicitMin = parseInt(selected.getAttribute('data-min'), 10);
+    if (Number.isFinite(explicitMin) && explicitMin > 1) return explicitMin;
+
+    // Fallback: if Tier1 is empty, treat as 5 m minimum; else no minimum
+    const tier1 = (selected.getAttribute('data-tier1') || '').trim();
+    return tier1 === '' ? 5 : 1;
+  }
+
+  // 👉 UPDATED: Add-to-cart is also gated by meeting the min qty when Metres
+  function updateCartState() {
+    const baseOk = isFabricSelected() && (!isColourRequired() || isColourSelected());
+
+    let qtyOk = true;
+    const type = typeSelect?.value;
+    if (type === 'Meterage') {
+      const minRequired = getMinRequiredForSelected(); // 1 | 5 | 10
+      const q = parseInt(quantityInput?.value || '0', 10) || 0;
+      qtyOk = q >= minRequired;
+    }
+
+    setCartEnabled(baseOk && qtyOk);
+  }
+
+  // --- Save selection nudges/animations ---
   function nudgeSaveSelection() {
     const el = document.getElementById('saveSelection');
     if (!el) return;
@@ -159,18 +169,6 @@ window.addEventListener('DOMContentLoaded', function () {
     el.style.transition = '';
     el.style.transform = 'translateY(0)';
   }
-
-  // Delegate to catch ALL ways the radio might change (click, keyboard, programmatic)
-  document.addEventListener('change', (e) => {
-    if (e.target && e.target.matches('input[type="radio"][name="fabric"]')) {
-      nudgeSaveSelection();
-      updateCartState();
-    }
-    if (e.target && e.target.matches('input[type="radio"][name="Colour"]')) {
-      updateCartState();
-    }
-  });
-
   const saveSelection = document.getElementById('saveSelection');
   function revealSaveSelection() {
     if (!saveSelection) return;
@@ -185,7 +183,7 @@ window.addEventListener('DOMContentLoaded', function () {
     if (displayTarget) displayTarget.textContent = fabricName;
   }
 
-  // 🔄 CHANGED: when a fabric is selected, show .large-button-change and remove bg from .large-button
+  // Toggle main/secondary button state
   function toggleButtonsBasedOnSession() {
     const hasSelected = !!sessionStorage.getItem('selectedFabric');
     if (largeButtonChange) largeButtonChange.style.display = hasSelected ? 'block' : 'none';
@@ -194,112 +192,117 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  // Helpers for price formatting
   function formatPrice(value) {
     if (!value || isNaN(value)) return value;
     return `$${parseFloat(value).toFixed(2)}`;
   }
-
   function isEmpty(value) {
     return !value || value.trim() === '' || value === 'NaN';
   }
 
-function updatePriceDisplayFromRadio(radio) {
-  const type = typeSelect?.value; // "Sample" or "Meterage"
-  const quantity = parseInt(quantityInput?.value || '1', 10);
-  const priceElement = document.getElementById('price');
-  const uomElement = document.getElementById('price-uom');
-  const hiddenPriceField = document.querySelector('input[name="price"]');
-  if (!type || !priceElement || !uomElement || !radio) return;
+  // Keep Print Width in sync with Type (Sample → 30x30cm, else selected fabric width)
+  function updatePrintWidthForType() {
+    const widthField = document.querySelector('input[name="Print Width"]');
+    if (!widthField) return;
 
-  // Get per-fabric prices
-  const tier1 = radio.getAttribute('data-tier1'); // (may be empty for min fabrics)
-  const tier2 = radio.getAttribute('data-tier2');
-  const tier3 = radio.getAttribute('data-tier3');
-
-  // Helper
-  const isEmpty = (v) => !v || v.trim() === '' || v === 'NaN';
-  const formatPrice = (v) => (v && !isNaN(v)) ? `$${parseFloat(v).toFixed(2)}` : v;
-
-  let price = '';
-  let showUom = true;
-
-  if (type === 'Sample') {
-    const sample = radio.getAttribute('data-sample');
-    price = sample;
-    uomElement.textContent = 'per sample';
-  } else if (type === 'Meterage') {
-    // Determine minimum meters for THIS fabric:
-    // Prefer an explicit data-min="5" or "10" on the radio; else:
-    // - If tier1 is empty, assume 5 m min (legacy fallback)
-    // - Otherwise, no minimum (1 m)
-    const explicitMin = parseInt(radio.getAttribute('data-min'), 10);
-    const minRequired = Number.isFinite(explicitMin)
-      ? explicitMin
-      : (isEmpty(tier1) ? 5 : 1);
-
-    // Under minimum → show message
-    if (quantity < minRequired) {
-      price = `Minimum ${minRequired}m required`;
-      showUom = false;
+    const type = typeSelect?.value;
+    if (type === 'Sample') {
+      widthField.value = '30x30cm';
     } else {
-      // Tier3 for 50+
-      if (quantity >= 50 && !isEmpty(tier3)) {
-        price = tier3;
-      } else {
-        if (minRequired === 1) {
-          // No minimum: Tier1 for 1–5 (inclusive), Tier2 for 6–49
-          if (quantity <= 5 && !isEmpty(tier1)) {
-            price = tier1;
-          } else if (!isEmpty(tier2)) {
-            price = tier2;
-          } else {
-            price = tier1; // graceful fallback
-          }
-        } else {
-          // Has minimum (5 or 10): Tier2 from minRequired up to 49
-          price = !isEmpty(tier2) ? tier2 : '';
-        }
-      }
-      uomElement.textContent = 'per meter';
+      const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
+      const fabricWidth = selected ? (selected.getAttribute('data-fabric-width') || '') : '';
+      if (fabricWidth) widthField.value = fabricWidth;
     }
   }
 
-  // Apply UI
-  priceElement.textContent = (typeof price === 'string' && price.includes('Minimum'))
-    ? price
-    : formatPrice(price);
+  // 👉 UPDATED: pricing picks correct tier with min logic (1–5 Tier1 for no-min; 5+ or 10+ Tier2 when min)
+  function updatePriceDisplayFromRadio(radio) {
+    const type = typeSelect?.value; // "Sample" or "Meterage"
+    const quantity = parseInt(quantityInput?.value || '1', 10);
+    const priceElement = document.getElementById('price');
+    const uomElement = document.getElementById('price-uom');
+    const hiddenPriceField = document.querySelector('input[name="price"]');
+    if (!type || !priceElement || !uomElement || !radio) return;
 
-  uomElement.style.display = showUom ? 'inline' : 'none';
-  if (hiddenPriceField) {
-    hiddenPriceField.value = (typeof price === 'string' && price.includes('Minimum'))
-      ? ''
-      : (price ? parseFloat(price).toFixed(2) : '');
+    const tier1 = radio.getAttribute('data-tier1'); // may be empty when min fabric
+    const tier2 = radio.getAttribute('data-tier2');
+    const tier3 = radio.getAttribute('data-tier3');
+
+    // Determine min for THIS fabric
+    const explicitMin = parseInt(radio.getAttribute('data-min'), 10);
+    const minRequired = Number.isFinite(explicitMin) ? explicitMin : (isEmpty(tier1) ? 5 : 1);
+
+    let price = '';
+    let showUom = true;
+
+    if (type === 'Sample') {
+      const sample = radio.getAttribute('data-sample');
+      price = sample;
+      uomElement.textContent = 'per sample';
+    } else if (type === 'Meterage') {
+      if (quantity < minRequired) {
+        price = `Minimum ${minRequired}m required`;
+        showUom = false;
+      } else {
+        // Tier 3 for 50+
+        if (quantity >= 50 && !isEmpty(tier3)) {
+          price = tier3;
+        } else {
+          if (minRequired === 1) {
+            // No minimum: Tier1 for 1–5, Tier2 for 6–49
+            if (quantity <= 5 && !isEmpty(tier1)) {
+              price = tier1;
+            } else if (!isEmpty(tier2)) {
+              price = tier2;
+            } else {
+              price = tier1; // graceful fallback
+            }
+          } else {
+            // Has minimum (5 or 10): Tier2 from minRequired up to 49
+            price = !isEmpty(tier2) ? tier2 : '';
+          }
+        }
+        uomElement.textContent = 'per meter';
+      }
+    }
+
+    priceElement.textContent = (typeof price === 'string' && price.includes('Minimum'))
+      ? price
+      : formatPrice(price);
+
+    uomElement.style.display = showUom ? 'inline' : 'none';
+    if (hiddenPriceField) {
+      hiddenPriceField.value = (typeof price === 'string' && price.includes('Minimum'))
+        ? ''
+        : (price ? parseFloat(price).toFixed(2) : '');
+    }
   }
-}
-
 
   function updateHiddenInputsFromRadio(radio) {
     if (!radio) return;
-    const fabricName = radio.getAttribute('data-fabric-name') || '';
+    const fabricName  = radio.getAttribute('data-fabric-name') || '';
     const fabricWidth = radio.getAttribute('data-fabric-width') || '';
-    const fabricGSM = radio.getAttribute('data-gsm') || '';
-    const fabricImage = radio.getAttribute('data-fabric-image') || ''; // << added
+    const fabricGSM   = radio.getAttribute('data-gsm') || '';
+    const fabricImage = radio.getAttribute('data-fabric-image') || '';
 
     sessionStorage.setItem('selectedFabric', fabricName);
-    // 🆕 Store & show selected fabric image
+
+    // Store & show selected fabric image
     if (fabricImage) {
-      sessionStorage.setItem('selectedFabricImage', fabricImage); // << added
-      if (selectedImageEl) {                                     // << added
+      sessionStorage.setItem('selectedFabricImage', fabricImage);
+      if (selectedImageEl) {
         selectedImageEl.src = fabricImage;
         selectedImageEl.style.display = 'block';
       }
     }
 
-    const nameField = document.querySelector('input[name="Fabric"]');
+    const nameField  = document.querySelector('input[name="Fabric"]');
     const priceField = document.querySelector('input[name="price"]');
     const widthField = document.querySelector('input[name="Print Width"]');
-    const weightField = document.getElementById('packageWeight');
-    if (nameField) nameField.value = fabricName;
+    const weightField= document.getElementById('packageWeight');
+
+    if (nameField)  nameField.value  = fabricName;
     if (priceField) priceField.value = '';
     if (widthField) widthField.value = fabricWidth;
     if (weightField) {
@@ -307,10 +310,11 @@ function updatePriceDisplayFromRadio(radio) {
       weightField.setAttribute('data-gsm', fabricGSM);
     }
 
+    // Colour sync (if any)
     const selectedColourRadio = document.querySelector('input[type="radio"][name="Colour"]:checked');
     const colourField = document.querySelector('input[type="hidden"][name="Colour"]');
-    const imageField = document.querySelector('input[name="image"]');
-    const primaryImage = document.getElementById('primary-image');
+    const imageField  = document.querySelector('input[name="image"]');
+    const primaryImage= document.getElementById('primary-image');
 
     function swapPrimaryImageResponsive(imgEl, url) {
       if (!imgEl || !url) return;
@@ -343,9 +347,7 @@ function updatePriceDisplayFromRadio(radio) {
     }
 
     updatePriceDisplayFromRadio(radio);
-    // 🆕 ensure Print Width reflects Type (Sample → 30x30cm, else fabric width)
     updatePrintWidthForType();
-
     calculatePackageWeight();
   }
 
@@ -394,7 +396,7 @@ function updatePriceDisplayFromRadio(radio) {
     }
 
     if (nudge) revealSaveSelection();
-    updateCartState();
+    updateCartState(); // ensure button reflects fabric selection + min rules
   }
 
   // Card click → set radio and dispatch change
@@ -419,56 +421,38 @@ function updatePriceDisplayFromRadio(radio) {
     if (target && target.matches('input[type="radio"][name="fabric"]')) {
       onFabricSelected(target, { nudge: true });
     }
+    if (target && target.matches('input[type="radio"][name="Colour"]')) {
+      updateCartState();
+    }
   });
 
-  // Quantity changes update pricing and weight
+  // Quantity changes update pricing, weight, and cart gating
   if (quantityInput) {
     quantityInput.addEventListener('input', () => {
       calculatePackageWeight();
       const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
       if (selected) updatePriceDisplayFromRadio(selected);
+      updateCartState(); // keep button disabled until min is met
     });
   }
 
-  // 🔄 CHANGED: Type SELECT changes update pricing + print width + #category mirror
+  // Type SELECT changes update pricing + print width + category mirror + cart gating
   if (typeSelect) {
     const onTypeChange = () => {
       const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
       if (selected) updatePriceDisplayFromRadio(selected);
       updatePrintWidthForType();
       syncCategoryFromType();
+      updateCartState();
+      applyQtyMin(); // also update the input's min/value for the current type/fabric
     };
     typeSelect.addEventListener('change', onTypeChange);
     typeSelect.addEventListener('input',  onTypeChange);
   }
 
-  // Colour swatch radios
-  const colourRadios = document.querySelectorAll('input[type="radio"][name="Colour"]');
-  const imageField = document.querySelector('input[name="image"]');
-  const primaryImage = document.getElementById('primary-image');
-
-  colourRadios.forEach(radio => {
-    radio.addEventListener('change', () => {
-      const imageUrl = radio.getAttribute('data-image');
-      const colourField = document.querySelector('input[type="hidden"][name="Colour"]');
-      if (colourField) colourField.value = radio.value;
-      if (imageUrl) {
-        if (imageField) imageField.value = imageUrl;
-        if (primaryImage) primaryImage.src = imageUrl;
-      }
-      document.querySelectorAll('.colour-swatch').forEach(swatch => {
-        swatch.style.border = 'none';
-      });
-      const selectedSwatch = radio.closest('.colour-swatch');
-      if (selectedSwatch) selectedSwatch.style.border = '1px solid black';
-
-      updateCartState();
-    });
-  });
-
   // Restore selection from sessionStorage (no nudge on restore)
   const selectedFabric = sessionStorage.getItem('selectedFabric');
-  const storedImage = sessionStorage.getItem('selectedFabricImage'); // << added
+  const storedImage = sessionStorage.getItem('selectedFabricImage');
   let hasRestored = false;
 
   if (selectedFabric) {
@@ -493,8 +477,8 @@ function updatePriceDisplayFromRadio(radio) {
     toggleButtonsBasedOnSession();
   }
 
-  // 🆕 If we have a stored image (e.g., set on Fabrics page), show it when nothing else has updated it yet
-  if (storedImage && selectedImageEl) {                 // << added
+  // If we have a stored image (e.g., set on Fabrics page), show it when nothing else has updated it yet
+  if (storedImage && selectedImageEl) {
     selectedImageEl.src = storedImage;
     selectedImageEl.style.display = 'block';
   }
@@ -516,13 +500,45 @@ function updatePriceDisplayFromRadio(radio) {
   if (designAddCart) {
     designAddCart.addEventListener('click', () => {
       sessionStorage.removeItem('selectedFabric');
-      sessionStorage.removeItem('selectedFabricImage'); // << added
+      sessionStorage.removeItem('selectedFabricImage');
       toggleButtonsBasedOnSession();
     });
   }
-});
 
+  // ===============================
+  // Quantity field guardrails (respect per-fabric mins)
+  // ===============================
+  function applyQtyMin() {
+    if (!quantityInput) return;
+
+    // Determine current min based on Type + selected fabric
+    const type = typeSelect?.value;
+    const minRequired = (type === 'Meterage') ? getMinRequiredForSelected() : 1;
+
+    // Apply min attr
+    quantityInput.min = String(minRequired);
+
+    // If empty or below min, set to min; otherwise leave user's value
+    const val = parseInt(quantityInput.value || '0', 10);
+    if (!Number.isFinite(val) || val < minRequired) {
+      quantityInput.value = String(minRequired);
+    }
+  }
+
+  // On load, set starting qty appropriately (no-min → 1; min → 5/10; Sample → 1)
+  applyQtyMin();
+
+  // On blur, re-apply min if user leaves it invalid
+  quantityInput?.addEventListener('blur', () => {
+    applyQtyMin();
+    updateCartState();
+  });
+}); // end DOMContentLoaded (main)
+
+
+// ===============================
 // Make entire swatch tile click select its radio (colour)
+// ===============================
 document.querySelectorAll('.colour-swatch').forEach(swatch => {
   swatch.style.cursor = 'pointer';
   swatch.addEventListener('click', function (e) {
@@ -535,24 +551,19 @@ document.querySelectorAll('.colour-swatch').forEach(swatch => {
   });
 });
 
-// Quantity field guardrails
+
+// ===============================
+// Legacy Quantity guard (kept compatible, but main min logic now in applyQtyMin())
+// ===============================
 window.addEventListener('DOMContentLoaded', function () {
   const quantityInput = document.getElementById('quantity');
   if (!quantityInput) return;
 
-  // Set initial value to 1 if empty or invalid
+  // Keep ≥1 while typing; final enforcement happens in applyQtyMin() on blur / type change
   if (!quantityInput.value || parseInt(quantityInput.value) < 1) {
     quantityInput.value = 1;
   }
 
-  // On blur, reset to 1 if empty or invalid
-  quantityInput.addEventListener('blur', function () {
-    if (!quantityInput.value || parseInt(quantityInput.value) < 1) {
-      quantityInput.value = 1;
-    }
-  });
-
-  // Prevent zero/negative while typing
   quantityInput.addEventListener('input', function () {
     const value = parseInt(quantityInput.value);
     if (value < 1 || isNaN(value)) {
