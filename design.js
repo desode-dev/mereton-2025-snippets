@@ -162,7 +162,7 @@ window.addEventListener('DOMContentLoaded', function () {
     categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
-  // --- Add to Cart gating (use existing grey-out/disable) ---
+  // --- Add to Cart gating ---
   function setCartEnabled(enabled) {
     if (!designAddCart) return;
     designAddCart.disabled = !enabled;
@@ -180,7 +180,6 @@ window.addEventListener('DOMContentLoaded', function () {
     return !!document.querySelector('input[type="radio"][name="Colour"]:checked');
   }
 
-  // Compute minimum for the current selection (1 | 5 | 10)
   function getMinRequiredForSelected() {
     const type = typeSelect?.value;
     if (type !== 'Meterage') return 1;
@@ -192,20 +191,19 @@ window.addEventListener('DOMContentLoaded', function () {
     return tier1 === '' ? 5 : 1;
   }
 
-  // Gating includes meeting the min when "Metres"
   function updateCartState() {
     const baseOk = isFabricSelected() && (!isColourRequired() || isColourSelected());
     let qtyOk = true;
     const type = typeSelect?.value;
     if (type === 'Meterage') {
-      const minRequired = getMinRequiredForSelected(); // 1 | 5 | 10
+      const minRequired = getMinRequiredForSelected(); 
       const q = parseInt(quantityInput?.value || '0', 10) || 0;
       qtyOk = q >= minRequired;
     }
     setCartEnabled(baseOk && qtyOk);
   }
 
-  // Save selection nudges/animations
+  // Save selection nudges
   function nudgeSaveSelection() {
     const el = document.getElementById('saveSelection');
     if (!el) return;
@@ -238,7 +236,6 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // Helpers for price formatting
   function formatPrice(value) {
     if (!value || isNaN(value)) return value;
     return `$${parseFloat(value).toFixed(2)}`;
@@ -247,7 +244,6 @@ window.addEventListener('DOMContentLoaded', function () {
     return !value || value.trim() === '' || value === 'NaN';
   }
 
-  // Keep Print Width in sync with Type (Sample → 30x30cm, else selected fabric width)
   function updatePrintWidthForType() {
     const widthField = document.querySelector('input[name="Print Width"]');
     if (!widthField) return;
@@ -261,19 +257,15 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // Pricing picks correct tier with min logic
-  // - No min: Tier1 for 1–5, Tier2 for 6–49, Tier3 for 50+
-  // - 5 min:  Tier2 for 5–49, Tier3 for 50+
-  // - 10 min: Tier2 for 10–49, Tier3 for 50+
   function updatePriceDisplayFromRadio(radio) {
-    const type = typeSelect?.value; // "Sample" or "Meterage"
+    const type = typeSelect?.value; 
     const quantity = parseInt(quantityInput?.value || '1', 10);
     const priceElement = document.getElementById('price');
     const uomElement = document.getElementById('price-uom');
     const hiddenPriceField = document.querySelector('input[name="price"]');
     if (!type || !priceElement || !uomElement || !radio) return;
 
-    const tier1 = radio.getAttribute('data-tier1'); // may be empty when min fabric
+    const tier1 = radio.getAttribute('data-tier1'); 
     const tier2 = radio.getAttribute('data-tier2');
     const tier3 = radio.getAttribute('data-tier3');
 
@@ -293,19 +285,17 @@ window.addEventListener('DOMContentLoaded', function () {
         showUom = false;
       } else {
         if (quantity >= 50 && !isEmpty(tier3)) {
-          price = tier3; // Tier3 for 50+
+          price = tier3; 
         } else {
           if (minRequired === 1) {
-            // No minimum: Tier1 for 1–5, Tier2 for 6–49
             if (quantity <= 5 && !isEmpty(tier1)) {
               price = tier1;
             } else if (!isEmpty(tier2)) {
               price = tier2;
             } else {
-              price = tier1; // graceful fallback
+              price = tier1; 
             }
           } else {
-            // Has minimum (5 or 10): Tier2 from minRequired up to 49
             price = !isEmpty(tier2) ? tier2 : '';
           }
         }
@@ -334,7 +324,6 @@ window.addEventListener('DOMContentLoaded', function () {
 
     sessionStorage.setItem('selectedFabric', fabricName);
 
-    // Store & show selected fabric image
     if (fabricImage) {
       sessionStorage.setItem('selectedFabricImage', fabricImage);
       if (selectedImageEl) {
@@ -356,10 +345,9 @@ window.addEventListener('DOMContentLoaded', function () {
       weightField.setAttribute('data-gsm', fabricGSM);
     }
 
-    // Colour sync (if any)
     const selectedColourRadio = document.querySelector('input[type="radio"][name="Colour"]:checked');
-    const colourField = document.querySelector('input[type="hidden"][name="Colour"]');
-    const imageField  = document.querySelector('input[name="image"]');
+    const imageField  = document.getElementById('design-image') || document.querySelector('input[name="image"]');
+    const colourField = document.getElementById('selected-colour') || document.querySelector('input[name="Colour"]');
     const primaryImage= document.getElementById('primary-image');
 
     function swapPrimaryImageResponsive(imgEl, url) {
@@ -389,9 +377,8 @@ window.addEventListener('DOMContentLoaded', function () {
       if (imageUrl) {
         if (imageField) imageField.value = imageUrl;
         if (primaryImage) swapPrimaryImageResponsive(primaryImage, imageUrl);
-        setPrimaryImageAll(imageUrl); // keep main viewer in sync
+        setPrimaryImageAll(imageUrl);
       }
-      // ensure border reflects currently-checked swatch
       updateColourSwatchBorders(selectedColourRadio);
     }
 
@@ -418,16 +405,13 @@ window.addEventListener('DOMContentLoaded', function () {
     weightEl.value = perUnitWeightKg.toFixed(2);
   }
 
-  // Central handler for a fabric selection; nudge on user changes only
   function onFabricSelected(radio, { nudge = true } = {}) {
     if (!radio) return;
 
-    // Update hidden fields & UI
     updateHiddenInputsFromRadio(radio);
     updateSelectedFabricDisplay(radio.getAttribute('data-fabric-name') || radio.value);
     toggleButtonsBasedOnSession();
 
-    // Clear selection UI
     allFabricCards.forEach(card => {
       card.style.border = 'none';
       card.classList.remove('fabric-selected');
@@ -435,7 +419,6 @@ window.addEventListener('DOMContentLoaded', function () {
       if (selectionEl) selectionEl.style.display = 'none';
     });
 
-    // Mark the selected card
     const wrapper = radio.closest('.design-fabric');
     if (wrapper) {
       wrapper.style.border = '1px solid black';
@@ -444,182 +427,41 @@ window.addEventListener('DOMContentLoaded', function () {
       if (selectionEl) selectionEl.style.display = 'block';
     }
 
-    if (nudge) revealSaveSelection();
-    updateCartState(); // ensure button reflects fabric selection + min rules
+    syncCategoryFromType();
+    updateCartState();
+    if (nudge) nudgeSaveSelection();
   }
 
-  // Card click → set radio and dispatch change
-  allFabricCards.forEach(wrapper => {
-    wrapper.style.cursor = 'pointer';
-    wrapper.addEventListener('click', function (e) {
-      if (e.target.closest('.design-fabric-view-button')) return;
-      const radio = wrapper.querySelector('input[type="radio"][name="fabric"]');
-      if (!radio) return;
-
-      document.querySelectorAll('input[type="radio"][name="fabric"]:checked')
-        .forEach(r => { r.checked = false; });
-
-      radio.checked = true;
-      radio.dispatchEvent(new Event('change', { bubbles: true }));
+  radios.forEach(radio => {
+    radio.addEventListener('change', function () {
+      onFabricSelected(this);
     });
   });
 
-  // Delegated radio change (fabric & colour)
-  document.addEventListener('change', (e) => {
+  quantityInput?.addEventListener('input', updateCartState);
+  typeSelect?.addEventListener('change', () => {
+    updateCartState();
+    syncCategoryFromType();
+  });
+
+  // --- NEW: colour selection updates hidden inputs immediately ---
+  document.addEventListener('change', function (e) {
     const target = e.target;
-    if (target && target.matches('input[type="radio"][name="fabric"]')) {
-      onFabricSelected(target, { nudge: true });
-    }
     if (target && target.matches('input[type="radio"][name="Colour"]')) {
-      // border highlight on the chosen colour swatch
       updateColourSwatchBorders(target);
-      // keep main image in sync
+
       const imageUrl = target.getAttribute('data-image');
       if (imageUrl) setPrimaryImageAll(imageUrl);
-      // re-check cart gating (colour may be required)
+
+      const imageField  = document.getElementById('design-image') || document.querySelector('input[name="image"]');
+      const colourField = document.getElementById('selected-colour') || document.querySelector('input[name="Colour"]');
+
+      if (imageField) imageField.value = imageUrl || '';
+      if (colourField) colourField.value = target.value || '';
+
       updateCartState();
     }
   });
 
-  // Quantity changes update pricing, weight, and cart gating
-  if (quantityInput) {
-    quantityInput.addEventListener('input', () => {
-      calculatePackageWeight();
-      const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
-      if (selected) updatePriceDisplayFromRadio(selected);
-      updateCartState(); // keep button disabled until min is met
-    });
-  }
-
-  // Type SELECT changes update pricing + print width + category mirror + cart gating
-  if (typeSelect) {
-    const onTypeChange = () => {
-      const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
-      if (selected) updatePriceDisplayFromRadio(selected);
-      updatePrintWidthForType();
-      syncCategoryFromType();
-      updateCartState();
-      applyQtyMin(); // also update the input's min/value for the current type/fabric
-    };
-    typeSelect.addEventListener('change', onTypeChange);
-    typeSelect.addEventListener('input', onTypeChange);
-  }
-
-  // Restore selection from sessionStorage (no nudge on restore)
-  const selectedFabric = sessionStorage.getItem('selectedFabric');
-  const storedImage = sessionStorage.getItem('selectedFabricImage');
-  let hasRestored = false;
-
-  if (selectedFabric) {
-    radios.forEach(function (radio) {
-      const radioName = radio.getAttribute('data-fabric-name')?.trim().toLowerCase();
-      const storedName = selectedFabric.trim().toLowerCase();
-      if (radioName === storedName) {
-        radio.checked = true;
-        onFabricSelected(radio, { nudge: false });
-        const fabricWrapper = radio.closest('.design-fabrics');
-        const radioWrapper = radio.closest('.design-fabric');
-        if (fabricWrapper && radioWrapper) {
-          fabricWrapper.scrollTo({ left: radioWrapper.offsetLeft - 20, behavior: 'smooth' });
-        }
-        hasRestored = true;
-      }
-    });
-  }
-
-  if (!hasRestored && selectedFabric) {
-    updateSelectedFabricDisplay(selectedFabric);
-    toggleButtonsBasedOnSession();
-  }
-
-  // If we have a stored image, show it when nothing else has updated it yet
-  if (storedImage && selectedImageEl) {
-    selectedImageEl.src = storedImage;
-    selectedImageEl.style.display = 'block';
-  }
-
-  // If a radio is pre-checked in the DOM, sync state (no nudge)
-  const initiallySelected = document.querySelector('input[type="radio"][name="fabric"]:checked');
-  if (initiallySelected) onFabricSelected(initiallySelected, { nudge: false });
-
-  // If a colour is already checked on load, ensure its border is visible
-  const initiallyCheckedColour = document.querySelector('input[type="radio"][name="Colour"]:checked');
-  if (initiallyCheckedColour) updateColourSwatchBorders(initiallyCheckedColour);
-
-  // Ensure button state is correct after any preselection/restore
-  updateCartState();
-
-  // Ensure Print Width is correct on load (handles restored state)
-  updatePrintWidthForType();
-
-  // Initial mirror of Type -> #category on load
-  syncCategoryFromType();
-
-  // Clear session on add to cart if you use that flow
-  const designAddCartBtn = designAddCart; // alias, just in case
-  if (designAddCartBtn) {
-    designAddCartBtn.addEventListener('click', () => {
-      sessionStorage.removeItem('selectedFabric');
-      sessionStorage.removeItem('selectedFabricImage');
-      toggleButtonsBasedOnSession();
-    });
-  }
-
-  /* =========================================
-     Quantity field guardrails (respect mins)
-     ========================================= */
-  function applyQtyMin() {
-    if (!quantityInput) return;
-    const type = typeSelect?.value;
-    const minRequired = (type === 'Meterage') ? getMinRequiredForSelected() : 1;
-    quantityInput.min = String(minRequired);
-    const val = parseInt(quantityInput.value || '0', 10);
-    if (!Number.isFinite(val) || val < minRequired) {
-      quantityInput.value = String(minRequired);
-    }
-  }
-
-  // On load, set starting qty appropriately (no-min → 1; min → 5/10; Sample → 1)
-  applyQtyMin();
-
-  // On blur, re-apply min if user leaves it invalid
-  quantityInput?.addEventListener('blur', () => {
-    applyQtyMin();
-    updateCartState();
-  });
-}); // end DOMContentLoaded (main)
-
-/* =========================================================
-   Make entire swatch tile click select its radio (colour)
-   ========================================================= */
-document.querySelectorAll('.colour-swatch').forEach(swatch => {
-  swatch.style.cursor = 'pointer';
-  swatch.addEventListener('click', function (e) {
-    if (e.target.tagName.toLowerCase() === 'input') return;
-    const radio = swatch.querySelector('input[type="radio"][name="Colour"]');
-    if (radio) {
-      radio.checked = true;
-      radio.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-  });
-});
-
-/* =========================================================
-   Legacy Quantity guard (compatible; main min logic in applyQtyMin())
-   ========================================================= */
-window.addEventListener('DOMContentLoaded', function () {
-  const quantityInput = document.getElementById('quantity');
-  if (!quantityInput) return;
-
-  // Keep ≥1 while typing; final enforcement happens in applyQtyMin() on blur / type change
-  if (!quantityInput.value || parseInt(quantityInput.value) < 1) {
-    quantityInput.value = 1;
-  }
-
-  quantityInput.addEventListener('input', function () {
-    const value = parseInt(quantityInput.value);
-    if (value < 1 || isNaN(value)) {
-      quantityInput.value = '';
-    }
-  });
+  toggleButtonsBasedOnSession();
 });
