@@ -445,18 +445,23 @@ window.addEventListener('DOMContentLoaded', function () {
   // Delegated radio change (fabric & colour)
   document.addEventListener('change', (e) => {
     const target = e.target;
-    if (target && target.matches('input[type="radio"][name="fabric"]')) {
-      onFabricSelected(target, { nudge: true });
-    }
-    if (target && target.matches('input[type="radio"][name="Colour"]')) {
-      // border highlight on the chosen colour swatch
-      updateColourSwatchBorders(target);
-      // keep main image in sync
-      const imageUrl = target.getAttribute('data-image');
-      if (imageUrl) setPrimaryImageAll(imageUrl);
-      // re-check cart gating (colour may be required)
-      updateCartState();
-    }
+if (target && target.matches('input[type="radio"][name="Colour"]')) {
+  // Update hidden inputs
+  const imageField  = document.getElementById('design-image') || document.querySelector('input[name="image"]');
+  const colourField = document.getElementById('selected-colour') || document.querySelector('input[name="Colour"]');
+  if (imageField)  imageField.value  = target.getAttribute('data-image') || '';
+  if (colourField) colourField.value = target.value || '';
+
+  // Update main image
+  const imageUrl = target.getAttribute('data-image');
+  if (imageUrl) setPrimaryImageAll(imageUrl);
+
+  // Update swatch border
+  updateColourSwatchBorders(target);
+
+  // Re-check cart gating (colour may be required)
+  updateCartState();
+}
   });
 
   // Quantity changes update pricing, weight, and cart gating
