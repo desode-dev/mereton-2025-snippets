@@ -247,6 +247,41 @@ window.addEventListener('DOMContentLoaded', function () {
     return !value || value.trim() === '' || value === 'NaN';
   }
 
+  /* =========================================
+     NEW: Dedicated minimum notice beside price
+     ========================================= */
+  function ensureMinNoticeEl() {
+    const priceEl = document.getElementById('price');
+    if (!priceEl) return null;
+
+    let notice = document.getElementById('min-notice');
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.id = 'min-notice';
+      notice.style.marginTop = '6px';
+      notice.style.fontSize = '14px';
+      notice.style.display = 'none';
+      priceEl.insertAdjacentElement('afterend', notice);
+    }
+    return notice;
+  }
+
+  function setMinNotice(text, force = false) {
+    const notice = ensureMinNoticeEl();
+    if (!notice) return;
+
+    if (!text) {
+      notice.textContent = '';
+      notice.style.display = 'none';
+      notice.dataset.forced = 'false';
+      return;
+    }
+
+    notice.textContent = text;
+    notice.style.display = 'block';
+    notice.dataset.forced = force ? 'true' : 'false';
+  }
+
   // Keep Print Width in sync with Type (Sample → 30x30cm, else selected fabric width)
   function updatePrintWidthForType() {
     const widthField = document.querySelector('input[name="Print Width"]');
@@ -261,10 +296,7 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // Pricing picks correct tier with min logic
-  // - No min: Tier1 for 1–5, Tier2 for 6–49, Tier3 for 50+
-  // - 5 min:  Tier2 for 5–49, Tier3 for 50+
-  // - 10 min: Tier2 for 10–49, Tier3 for 50+
+  // Pricing: always show price; show min notice separately
   function updatePriceDisplayFromRadio(radio) {
     const type = typeSelect?.value; // "Sample" or "Meterage"
     const quantity = parseInt(quantityInput?.value || '1', 10);
@@ -284,44 +316,50 @@ window.addEventListener('DOMContentLoaded', function () {
     let showUom = true;
 
     if (type === 'Sample') {
+      setMinNotice('', false);
       const sample = radio.getAttribute('data-sample');
       price = sample;
       uomElement.textContent = 'per sample';
     } else if (type === 'Meterage') {
-      if (quantity < minRequired) {
-        price = `Minimum ${minRequired}m required`;
-        showUom = false;
-      } else {
-        if (quantity >= 50 && !isEmpty(tier3)) {
-          price = tier3; // Tier3 for 50+
-        } else {
-          if (minRequired === 1) {
-            // No minimum: Tier1 for 1–5, Tier2 for 6–49
-            if (quantity <= 5 && !isEmpty(tier1)) {
-              price = tier1;
-            } else if (!isEmpty(tier2)) {
-              price = tier2;
-            } else {
-              price = tier1; // graceful fallback
-            }
-          } else {
-            // Has minimum (5 or 10): Tier2 from minRequired up to 49
-            price = !isEmpty(tier2) ? tier2 : '';
-          }
-        }
-        uomElement.textContent = 'per meter';
+      const isBelowMin = quantity < minRequired;
+      const noticeText = (minRequired > 1 && isBelowMin) ? `Minimum ${minRequired}m required` : '';
+
+      const noticeEl = ensureMinNoticeEl();
+      const isForced = noticeEl?.dataset.forced === 'true';
+
+      if (noticeText) {
+        setMinNotice(noticeText, false);
+      } else if (!isForced) {
+        setMinNotice('', false);
       }
+
+      const effectiveQty = Math.max(quantity, minRequired);
+
+      if (effectiveQty >= 50 && !isEmpty(tier3)) {
+        price = tier3;
+      } else {
+        if (minRequired === 1) {
+          if (effectiveQty <= 5 && !isEmpty(tier1)) {
+            price = tier1;
+          } else if (!isEmpty(tier2)) {
+            price = tier2;
+          } else {
+            price = tier1;
+          }
+        } else {
+          price = !isEmpty(tier2) ? tier2 : '';
+        }
+      }
+
+      uomElement.textContent = 'per meter';
+      showUom = true;
     }
 
-    priceElement.textContent = (typeof price === 'string' && price.includes('Minimum'))
-      ? price
-      : formatPrice(price);
-
+    priceElement.textContent = formatPrice(price);
     uomElement.style.display = showUom ? 'inline' : 'none';
+
     if (hiddenPriceField) {
-      hiddenPriceField.value = (typeof price === 'string' && price.includes('Minimum'))
-        ? ''
-        : (price ? parseFloat(price).toFixed(2) : '');
+      hiddenPriceField.value = price ? parseFloat(price).toFixed(2) : '';
     }
   }
 
@@ -423,7 +461,7 @@ window.addEventListener('DOMContentLoaded', function () {
     }
 
     if (nudge) revealSaveSelection();
-    updateCartState(); // ensure button reflects fabric selection + min rules
+    updateCartState();
   }
 
   // Card click → set radio and dispatch change
@@ -443,34 +481,29 @@ window.addEventListener('DOMContentLoaded', function () {
   });
 
   // Delegated radio change (fabric & colour)
-document.addEventListener('change', (e) => {
-  const target = e.target;
+  document.addEventListener('change', (e) => {
+    const target = e.target;
 
-  // Fabric selection
-  if (target && target.matches('input[type="radio"][name="fabric"]')) {
-    onFabricSelected(target, { nudge: true });
-  }
+    if (target && target.matches('input[type="radio"][name="fabric"]')) {
+      const noticeEl = document.getElementById('min-notice');
+      if (noticeEl) noticeEl.dataset.forced = 'false';
+      onFabricSelected(target, { nudge: true });
+    }
 
-  // Colour selection
-  if (target && target.matches('input[type="radio"][name="Colour"]')) {
-    const imageField  = document.getElementById('design-image') || document.querySelector('input[name="image"]');
-    const colourField = document.getElementById('selected-colour') || document.querySelector('input[name="Colour"]');
-    
-    if (imageField)  imageField.value  = target.getAttribute('data-image') || '';
-    if (colourField) colourField.value = target.value || '';
+    if (target && target.matches('input[type="radio"][name="Colour"]')) {
+      const imageField  = document.getElementById('design-image') || document.querySelector('input[name="image"]');
+      const colourField = document.getElementById('selected-colour') || document.querySelector('input[name="Colour"]');
 
-    // Update main image
-    const imageUrl = target.getAttribute('data-image');
-    if (imageUrl) setPrimaryImageAll(imageUrl);
+      if (imageField)  imageField.value  = target.getAttribute('data-image') || '';
+      if (colourField) colourField.value = target.value || '';
 
-    // Update swatch border
-    updateColourSwatchBorders(target);
+      const imageUrl = target.getAttribute('data-image');
+      if (imageUrl) setPrimaryImageAll(imageUrl);
 
-    // Re-check cart gating (colour may be required)
-    updateCartState();
-  }
-});
-
+      updateColourSwatchBorders(target);
+      updateCartState();
+    }
+  });
 
   // Quantity changes update pricing, weight, and cart gating
   if (quantityInput) {
@@ -478,19 +511,30 @@ document.addEventListener('change', (e) => {
       calculatePackageWeight();
       const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
       if (selected) updatePriceDisplayFromRadio(selected);
-      updateCartState(); // keep button disabled until min is met
+
+      const minRequired = getMinRequiredForSelected();
+      const q = parseInt(quantityInput.value || '0', 10) || 0;
+      if (q >= minRequired) {
+        const noticeEl = document.getElementById('min-notice');
+        if (noticeEl) noticeEl.dataset.forced = 'false';
+      }
+
+      updateCartState();
     });
   }
 
   // Type SELECT changes update pricing + print width + category mirror + cart gating
   if (typeSelect) {
     const onTypeChange = () => {
+      const noticeEl = document.getElementById('min-notice');
+      if (noticeEl) noticeEl.dataset.forced = 'false';
+
       const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
       if (selected) updatePriceDisplayFromRadio(selected);
       updatePrintWidthForType();
       syncCategoryFromType();
       updateCartState();
-      applyQtyMin(); // also update the input's min/value for the current type/fabric
+      applyQtyMin();
     };
     typeSelect.addEventListener('change', onTypeChange);
     typeSelect.addEventListener('input', onTypeChange);
@@ -523,31 +567,22 @@ document.addEventListener('change', (e) => {
     toggleButtonsBasedOnSession();
   }
 
-  // If we have a stored image, show it when nothing else has updated it yet
   if (storedImage && selectedImageEl) {
     selectedImageEl.src = storedImage;
     selectedImageEl.style.display = 'block';
   }
 
-  // If a radio is pre-checked in the DOM, sync state (no nudge)
   const initiallySelected = document.querySelector('input[type="radio"][name="fabric"]:checked');
   if (initiallySelected) onFabricSelected(initiallySelected, { nudge: false });
 
-  // If a colour is already checked on load, ensure its border is visible
   const initiallyCheckedColour = document.querySelector('input[type="radio"][name="Colour"]:checked');
   if (initiallyCheckedColour) updateColourSwatchBorders(initiallyCheckedColour);
 
-  // Ensure button state is correct after any preselection/restore
   updateCartState();
-
-  // Ensure Print Width is correct on load (handles restored state)
   updatePrintWidthForType();
-
-  // Initial mirror of Type -> #category on load
   syncCategoryFromType();
 
-  // Clear session on add to cart if you use that flow
-  const designAddCartBtn = designAddCart; // alias, just in case
+  const designAddCartBtn = designAddCart;
   if (designAddCartBtn) {
     designAddCartBtn.addEventListener('click', () => {
       sessionStorage.removeItem('selectedFabric');
@@ -571,77 +606,71 @@ document.addEventListener('change', (e) => {
   }
 
   /* =========================================
-   HARD STOP for your custom +/- images
-   (.quantity-minus / .quantity-plus)
-   ========================================= */
-
-function getCurrentMinRequired() {
-  const type = typeSelect?.value;
-  return (type === 'Meterage') ? getMinRequiredForSelected() : 1;
-}
-
-function clampQtyToMin() {
-  if (!quantityInput) return;
-  const minRequired = getCurrentMinRequired();
-  quantityInput.min = String(minRequired);
-
-  const current = parseInt(quantityInput.value || '0', 10);
-  if (!Number.isFinite(current) || current < minRequired) {
-    quantityInput.value = String(minRequired);
+     HARD STOP for your custom +/- images
+     (.quantity-minus / .quantity-plus)
+     - Does NOT increment/decrement (prevents double steps)
+     - Blocks going below min
+     - Clamps after existing handler runs
+     ========================================= */
+  function getCurrentMinRequired() {
+    const type = typeSelect?.value;
+    return (type === 'Meterage') ? getMinRequiredForSelected() : 1;
   }
-}
 
-function fireQtyChanged() {
-  if (!quantityInput) return;
-  quantityInput.dispatchEvent(new Event('input', { bubbles: true }));
-  quantityInput.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-document.addEventListener(
-  'click',
-  (e) => {
+  function fireQtyChanged() {
     if (!quantityInput) return;
+    quantityInput.dispatchEvent(new Event('input', { bubbles: true }));
+    quantityInput.dispatchEvent(new Event('change', { bubbles: true }));
+  }
 
-    const minusBtn = e.target.closest('.quantity-minus');
-    const plusBtn  = e.target.closest('.quantity-plus');
-    if (!minusBtn && !plusBtn) return;
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (!quantityInput) return;
 
-    // Always ensure min/value is in sync before doing anything
-    clampQtyToMin();
+      const minusBtn = e.target.closest('.quantity-minus');
+      const plusBtn  = e.target.closest('.quantity-plus');
+      if (!minusBtn && !plusBtn) return;
 
-    const minRequired = getCurrentMinRequired();
-    const current = parseInt(quantityInput.value || '0', 10) || 0;
+      const minRequired = getCurrentMinRequired();
+      const current = parseInt(quantityInput.value || '0', 10) || 0;
 
-    if (minusBtn) {
-      // If already at min, block the decrement entirely
-      if (current <= minRequired) {
+      // If user tries to go below min, block the click entirely
+      if (minusBtn && current <= minRequired) {
         e.preventDefault();
         e.stopPropagation();
         quantityInput.value = String(minRequired);
+
+        if (typeSelect?.value === 'Meterage' && minRequired > 1) {
+          setMinNotice(`Minimum ${minRequired}m required`, true);
+        }
+
+        const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
+        if (selected) updatePriceDisplayFromRadio(selected);
+
         fireQtyChanged();
         updateCartState();
         return;
       }
 
-      // Otherwise decrement but never below min
-      const next = Math.max(minRequired, current - 1);
-      quantityInput.value = String(next);
-      fireQtyChanged();
-      updateCartState();
-      return;
-    }
+      // Otherwise let existing handler change the value, then clamp + refresh after it runs.
+      setTimeout(() => {
+        applyQtyMin();
 
-    if (plusBtn) {
-      // Simple increment
-      quantityInput.value = String(current + 1);
-      fireQtyChanged();
-      updateCartState();
-      return;
-    }
-  },
-  true
-);
+        if (plusBtn) {
+          const noticeEl = document.getElementById('min-notice');
+          if (noticeEl) noticeEl.dataset.forced = 'false';
+        }
 
+        const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
+        if (selected) updatePriceDisplayFromRadio(selected);
+
+        fireQtyChanged();
+        updateCartState();
+      }, 0);
+    },
+    true
+  );
 
   // On load, set starting qty appropriately (no-min → 1; min → 5/10; Sample → 1)
   applyQtyMin();
@@ -649,6 +678,15 @@ document.addEventListener(
   // On blur, re-apply min if user leaves it invalid
   quantityInput?.addEventListener('blur', () => {
     applyQtyMin();
+
+    const minRequired = getMinRequiredForSelected();
+    const q = parseInt(quantityInput.value || '0', 10) || 0;
+    if (q >= minRequired) {
+      const noticeEl = document.getElementById('min-notice');
+      if (noticeEl) noticeEl.dataset.forced = 'false';
+      setMinNotice('', false);
+    }
+
     updateCartState();
   });
 }); // end DOMContentLoaded (main)
@@ -687,4 +725,3 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   });
 });
-
