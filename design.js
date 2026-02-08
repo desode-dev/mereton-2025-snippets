@@ -570,6 +570,53 @@ document.addEventListener('change', (e) => {
     }
   }
 
+  /* =========================================
+     HARD STOP: prevent +/- from going below min
+     (Webflow quantity buttons ignore input.min)
+     ========================================= */
+
+  function getCurrentMinRequired() {
+    const type = typeSelect?.value;
+    return (type === 'Meterage') ? getMinRequiredForSelected() : 1;
+  }
+
+  function fireQtyChanged() {
+    // trigger the same logic your input handler relies on
+    quantityInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    quantityInput?.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  // Delegated click handler so it works even if Webflow re-renders the controls
+  document.addEventListener('click', (e) => {
+    if (!quantityInput) return;
+
+    const minusBtn = e.target.closest('.w-commerce-commercequantityminus');
+    const plusBtn  = e.target.closest('.w-commerce-commercequantityplus');
+    if (!minusBtn && !plusBtn) return;
+
+    // Only enforce special mins when Meterage is selected
+    const minRequired = getCurrentMinRequired();
+
+    // If it’s the minus button and we’re already at/below min, block the decrement
+    if (minusBtn) {
+      const current = parseInt(quantityInput.value || '0', 10) || 0;
+      if (current <= minRequired) {
+        e.preventDefault();
+        e.stopPropagation();
+        quantityInput.value = String(minRequired);
+        fireQtyChanged();
+        return;
+      }
+    }
+
+    // Let the click happen, then clamp after Webflow updates the value
+    setTimeout(() => {
+      // applyQtyMin will set quantityInput.min and clamp value if needed
+      applyQtyMin();
+      fireQtyChanged();
+    }, 0);
+  }, true);
+
   // On load, set starting qty appropriately (no-min → 1; min → 5/10; Sample → 1)
   applyQtyMin();
 
@@ -614,3 +661,4 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   });
 });
+
