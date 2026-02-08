@@ -571,51 +571,77 @@ document.addEventListener('change', (e) => {
   }
 
   /* =========================================
-     HARD STOP: prevent +/- from going below min
-     (Webflow quantity buttons ignore input.min)
-     ========================================= */
+   HARD STOP for your custom +/- images
+   (.quantity-minus / .quantity-plus)
+   ========================================= */
 
-  function getCurrentMinRequired() {
-    const type = typeSelect?.value;
-    return (type === 'Meterage') ? getMinRequiredForSelected() : 1;
+function getCurrentMinRequired() {
+  const type = typeSelect?.value;
+  return (type === 'Meterage') ? getMinRequiredForSelected() : 1;
+}
+
+function clampQtyToMin() {
+  if (!quantityInput) return;
+  const minRequired = getCurrentMinRequired();
+  quantityInput.min = String(minRequired);
+
+  const current = parseInt(quantityInput.value || '0', 10);
+  if (!Number.isFinite(current) || current < minRequired) {
+    quantityInput.value = String(minRequired);
   }
+}
 
-  function fireQtyChanged() {
-    // trigger the same logic your input handler relies on
-    quantityInput?.dispatchEvent(new Event('input', { bubbles: true }));
-    quantityInput?.dispatchEvent(new Event('change', { bubbles: true }));
-  }
+function fireQtyChanged() {
+  if (!quantityInput) return;
+  quantityInput.dispatchEvent(new Event('input', { bubbles: true }));
+  quantityInput.dispatchEvent(new Event('change', { bubbles: true }));
+}
 
-  // Delegated click handler so it works even if Webflow re-renders the controls
-  document.addEventListener('click', (e) => {
+document.addEventListener(
+  'click',
+  (e) => {
     if (!quantityInput) return;
 
-    const minusBtn = e.target.closest('.w-commerce-commercequantityminus');
-    const plusBtn  = e.target.closest('.w-commerce-commercequantityplus');
+    const minusBtn = e.target.closest('.quantity-minus');
+    const plusBtn  = e.target.closest('.quantity-plus');
     if (!minusBtn && !plusBtn) return;
 
-    // Only enforce special mins when Meterage is selected
-    const minRequired = getCurrentMinRequired();
+    // Always ensure min/value is in sync before doing anything
+    clampQtyToMin();
 
-    // If it’s the minus button and we’re already at/below min, block the decrement
+    const minRequired = getCurrentMinRequired();
+    const current = parseInt(quantityInput.value || '0', 10) || 0;
+
     if (minusBtn) {
-      const current = parseInt(quantityInput.value || '0', 10) || 0;
+      // If already at min, block the decrement entirely
       if (current <= minRequired) {
         e.preventDefault();
         e.stopPropagation();
         quantityInput.value = String(minRequired);
         fireQtyChanged();
+        updateCartState();
         return;
       }
+
+      // Otherwise decrement but never below min
+      const next = Math.max(minRequired, current - 1);
+      quantityInput.value = String(next);
+      fireQtyChanged();
+      updateCartState();
+      return;
     }
 
-    // Let the click happen, then clamp after Webflow updates the value
-    setTimeout(() => {
-      // applyQtyMin will set quantityInput.min and clamp value if needed
-      applyQtyMin();
+    if (plusBtn) {
+      // Simple increment
+      quantityInput.value = String(current + 1);
       fireQtyChanged();
-    }, 0);
-  }, true);
+      updateCartState();
+      return;
+    }
+  },
+  true
+);
+
 
   // On load, set starting qty appropriately (no-min → 1; min → 5/10; Sample → 1)
   applyQtyMin();
