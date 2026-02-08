@@ -248,39 +248,30 @@ window.addEventListener('DOMContentLoaded', function () {
   }
 
   /* =========================================
-     NEW: Dedicated minimum notice beside price
+     Minimum message output (uses #minoutput.minimum)
      ========================================= */
-  function ensureMinNoticeEl() {
-    const priceEl = document.getElementById('price');
-    if (!priceEl) return null;
-
-    let notice = document.getElementById('min-notice');
-    if (!notice) {
-      notice = document.createElement('div');
-      notice.id = 'min-notice';
-      notice.style.marginTop = '6px';
-      notice.style.fontSize = '14px';
-      notice.style.display = 'none';
-      priceEl.insertAdjacentElement('afterend', notice);
-    }
-    return notice;
+  function getMinOutputEl() {
+    return document.getElementById('minoutput');
   }
 
   function setMinNotice(text, force = false) {
-    const notice = ensureMinNoticeEl();
-    if (!notice) return;
+    const el = getMinOutputEl();
+    if (!el) return;
 
     if (!text) {
-      notice.textContent = '';
-      notice.style.display = 'none';
-      notice.dataset.forced = 'false';
+      el.textContent = '';
+      el.style.display = 'none';
+      el.dataset.forced = 'false';
       return;
     }
 
-    notice.textContent = text;
-    notice.style.display = 'block';
-    notice.dataset.forced = force ? 'true' : 'false';
+    el.textContent = text;
+    el.style.display = '';
+    el.dataset.forced = force ? 'true' : 'false';
   }
+
+  // Hide on load by default
+  setMinNotice('', false);
 
   // Keep Print Width in sync with Type (Sample → 30x30cm, else selected fabric width)
   function updatePrintWidthForType() {
@@ -324,7 +315,7 @@ window.addEventListener('DOMContentLoaded', function () {
       const isBelowMin = quantity < minRequired;
       const noticeText = (minRequired > 1 && isBelowMin) ? `Minimum ${minRequired}m required` : '';
 
-      const noticeEl = ensureMinNoticeEl();
+      const noticeEl = getMinOutputEl();
       const isForced = noticeEl?.dataset.forced === 'true';
 
       if (noticeText) {
@@ -485,7 +476,7 @@ window.addEventListener('DOMContentLoaded', function () {
     const target = e.target;
 
     if (target && target.matches('input[type="radio"][name="fabric"]')) {
-      const noticeEl = document.getElementById('min-notice');
+      const noticeEl = document.getElementById('minoutput');
       if (noticeEl) noticeEl.dataset.forced = 'false';
       onFabricSelected(target, { nudge: true });
     }
@@ -515,7 +506,7 @@ window.addEventListener('DOMContentLoaded', function () {
       const minRequired = getMinRequiredForSelected();
       const q = parseInt(quantityInput.value || '0', 10) || 0;
       if (q >= minRequired) {
-        const noticeEl = document.getElementById('min-notice');
+        const noticeEl = document.getElementById('minoutput');
         if (noticeEl) noticeEl.dataset.forced = 'false';
       }
 
@@ -526,7 +517,7 @@ window.addEventListener('DOMContentLoaded', function () {
   // Type SELECT changes update pricing + print width + category mirror + cart gating
   if (typeSelect) {
     const onTypeChange = () => {
-      const noticeEl = document.getElementById('min-notice');
+      const noticeEl = document.getElementById('minoutput');
       if (noticeEl) noticeEl.dataset.forced = 'false';
 
       const selected = document.querySelector('input[type="radio"][name="fabric"]:checked');
@@ -658,7 +649,7 @@ window.addEventListener('DOMContentLoaded', function () {
         applyQtyMin();
 
         if (plusBtn) {
-          const noticeEl = document.getElementById('min-notice');
+          const noticeEl = document.getElementById('minoutput');
           if (noticeEl) noticeEl.dataset.forced = 'false';
         }
 
@@ -682,7 +673,7 @@ window.addEventListener('DOMContentLoaded', function () {
     const minRequired = getMinRequiredForSelected();
     const q = parseInt(quantityInput.value || '0', 10) || 0;
     if (q >= minRequired) {
-      const noticeEl = document.getElementById('min-notice');
+      const noticeEl = document.getElementById('minoutput');
       if (noticeEl) noticeEl.dataset.forced = 'false';
       setMinNotice('', false);
     }
