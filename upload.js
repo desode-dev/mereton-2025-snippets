@@ -43,14 +43,17 @@ window.addEventListener('DOMContentLoaded', () => {
   const LENS_RADIUS = 100;   // adjust as needed
   const LENS_BORDER_PX = 1;  // ring thickness
 
-  // NEW: elements hidden until a file is uploaded
+  // Elements hidden until a file is uploaded
   const gatedUI = document.querySelectorAll('.product-upload-options, .input-wrap');
 
-  // NEW: canvas area (centered by default; align-start after upload)
+  // The block that contains scale / physical size / repeat UI (hide for non-editable uploads)
+  const productUploadOptions = document.querySelector('.product-upload-options');
+
+  // Canvas area (centered by default; align-start after upload)
   const canvasArea = document.querySelector('.canvas-area');
 
-  // NEW: non-editable notice element (optional)
-  // Add something like: <div id="nonEditableNotice" style="display:none;"></div>
+  // Non-editable notice element (optional)
+  // Add: <div id="nonEditableNotice" style="display:none;"></div>
   const nonEditableNotice = document.getElementById('nonEditableNotice');
 
   function showNonEditableNotice(fileName) {
@@ -75,6 +78,12 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
   setUploadDependentUI(false); // hide on load
+
+  // NEW: Hide/show the editing controls block when file isn't editable
+  function setEditingControlsVisible(visible) {
+    if (!productUploadOptions) return;
+    productUploadOptions.style.display = visible ? '' : 'none';
+  }
 
   // Helpers
   function getRepeatStyle() {
@@ -104,25 +113,21 @@ window.addEventListener('DOMContentLoaded', () => {
     return parseInt(scaleSlider.value, 10) / 100;
   }
 
-  // NEW: draw placeholder message inside the canvas when no image yet
   function drawPlaceholder() {
     const msg = 'your file will display here';
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // soft background
     ctx.save();
     ctx.fillStyle = '#f7f7f7';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.restore();
 
-    // subtle border
     ctx.save();
     ctx.strokeStyle = '#ddd';
     ctx.lineWidth = 1;
     ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
     ctx.restore();
 
-    // centered text
     ctx.save();
     ctx.fillStyle = '#999';
     ctx.font = '14px system-ui, sans-serif';
@@ -132,7 +137,6 @@ window.addEventListener('DOMContentLoaded', () => {
     ctx.restore();
   }
 
-  // NEW: when file is non-editable, render a dedicated message in the canvas
   function drawNonEditableCanvasMessage(fileName) {
     const msg1 = 'Preview unavailable for this file type';
     const msg2 = `(${fileName})`;
@@ -228,7 +232,6 @@ window.addEventListener('DOMContentLoaded', () => {
     ctx.restore();
   }
 
-  // Draw tiles using the preview mapping (canvas is 100 cm tall)
   function drawTilesAtScale(logicalScale) {
     const repeatStyle = getRepeatStyle();
     const userPpi = getUserPpi();
@@ -286,8 +289,6 @@ window.addEventListener('DOMContentLoaded', () => {
     return { scaledImageWidthCm, scaledImageHeightCm, pxPerCm };
   }
 
-  // Draw tiles at REAL physical size (like SingleTile: 37.8 px/cm),
-  // over exactly the area the lens can show, anchored to the cursor's world point.
   function drawTilesAtPhysicalScale(scale, pxPerCmPhysical, anchorPxX, anchorPxY) {
     const repeatStyle = getRepeatStyle();
     const userPpi = getUserPpi();
@@ -322,7 +323,6 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         break;
       }
-
       case 'half-drop': {
         for (let col = firstCol - 2; col <= lastCol + 2; col++) {
           const x = col * tileW;
@@ -336,7 +336,6 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         break;
       }
-
       case 'mirror': {
         for (let row = firstRow - 2; row <= lastRow + 2; row++) {
           const y = row * tileH;
@@ -353,7 +352,6 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         break;
       }
-
       default: {
         for (let col = firstCol; col <= lastCol; col++) {
           const x = col * tileW;
@@ -366,7 +364,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Full render (preview + rulers + lens)
   function renderAll() {
     if (!imgLoaded || !isEditableFile) return;
 
@@ -374,7 +371,6 @@ window.addEventListener('DOMContentLoaded', () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const { scaledImageWidthCm, pxPerCm } = drawTilesAtScale(scale);
-
     drawRulers(pxPerCm);
 
     if (hiddenWidth)  hiddenWidth.value  = scaledImageWidthCm.toFixed(2) + 'cm';
@@ -385,7 +381,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (lensActive) drawLens(scale);
   }
 
-  // Loupe that shows TRUE physical size (37.8 px/cm) aligned to the same world point
   function drawLens(currentScale) {
     if (!imgLoaded || !isEditableFile) return;
 
@@ -405,7 +400,6 @@ window.addEventListener('DOMContentLoaded', () => {
     ctx.clip();
 
     ctx.translate(lensX - physX_px, lensY - physY_px);
-
     drawTilesAtPhysicalScale(currentScale, PX_PER_CM_PHYSICAL, physX_px, physY_px);
 
     ctx.restore();
@@ -467,8 +461,9 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   scaleSlider.addEventListener('input', () => {
+    if (!isEditableFile) return;
     scaleValue.textContent = scaleSlider.value;
-    if (imgLoaded && isEditableFile) {
+    if (imgLoaded) {
       renderAll();
       calculateDPI();
     }
@@ -503,7 +498,6 @@ window.addEventListener('DOMContentLoaded', () => {
     ppiSelect.addEventListener('input', syncImageQualityFromPpi);
     syncImageQualityFromPpi();
   }
-  // ---------------------------------------------------------------------------
 
   const repeatStyleSelectElem = document.getElementById('repeatStyle');
   if (repeatStyleSelectElem) {
@@ -541,14 +535,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // --- Sync "Type" dropdown -> #category -------------------------------------
   const typeSelectEl = document.getElementById('Type') || document.querySelector('select[name="Type"]');
-  const categoryInput = document.getElementById('category');
+  const categoryInput2 = document.getElementById('category');
 
   function syncCategoryFromType() {
-    if (!typeSelectEl || !categoryInput) return;
+    if (!typeSelectEl || !categoryInput2) return;
     const val = typeSelectEl.value || '';
-    categoryInput.value = val;
-    categoryInput.dispatchEvent(new Event('input', { bubbles: true }));
-    categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
+    categoryInput2.value = val;
+    categoryInput2.dispatchEvent(new Event('input', { bubbles: true }));
+    categoryInput2.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   if (typeSelectEl) {
@@ -558,8 +552,6 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Upload handling -------------------------------------------------------
-  // Editable: png, jpg, jpeg (can render in canvas)
-  // Non-editable (allowed): pdf, psd, ai, tif/tiff (allowed to checkout but no tool editing)
   const editableExtensions = ['png', 'jpg', 'jpeg'];
   const nonEditableAllowedExtensions = ['pdf', 'psd', 'ai', 'tif', 'tiff'];
   const allAllowedExtensions = [...editableExtensions, ...nonEditableAllowedExtensions];
@@ -598,9 +590,10 @@ window.addEventListener('DOMContentLoaded', () => {
     // Show UI once we have a file (even if not editable)
     setUploadDependentUI(true);
 
-    // Editable image types: load into canvas
+    // Editable: show editor controls
     if (isEditableExt(ext)) {
       isEditableFile = true;
+      setEditingControlsVisible(true);
 
       uploadedImage = new Image();
       uploadedImage.onload = () => {
@@ -610,40 +603,28 @@ window.addEventListener('DOMContentLoaded', () => {
       };
       uploadedImage.onerror = () => {
         alert("We couldn't load that image for preview. You can try another file.");
-        // Keep cart disabled since we can't confirm preview state
         setCartEnabled(false);
       };
       uploadedImage.src = fileUrl;
       return;
     }
 
-    // Non-editable allowed: permit checkout, but no canvas/controls
+    // Non-editable: hide editor controls + allow checkout
     isEditableFile = false;
-    imgLoaded = true; // we have a file, just not previewable
+    imgLoaded = true;
 
-    // Show notice + render non-editable canvas message
+    // Hide all controls under .product-upload-options (scaler, image size, repeat selector)
+    setEditingControlsVisible(false);
+
     showNonEditableNotice(fileName);
     updateCanvasSize();
-
-    // Disable interactive editing controls (but still allow checkout)
-    if (repeatGroup) repeatGroup.style.pointerEvents = 'none';
-    if (legacySelect) legacySelect.disabled = true;
-    if (scaleSlider) scaleSlider.disabled = true;
-    if (ppiSelect) ppiSelect.disabled = true;
-
-    // If you want to keep printWidth editable for non-editable types, leave it enabled.
-    // If you want to lock it too, uncomment:
-    // if (printWidthInput) printWidthInput.disabled = true;
 
     setCartEnabled(true);
   });
 
   function setupImageForCanvas() {
-    // re-enable editing controls in case previous upload was non-editable
-    if (repeatGroup) repeatGroup.style.pointerEvents = '';
-    if (legacySelect) legacySelect.disabled = false;
-    if (scaleSlider) scaleSlider.disabled = false;
-    if (ppiSelect) ppiSelect.disabled = false;
+    // Ensure controls visible again if previous upload was non-editable
+    setEditingControlsVisible(true);
 
     scaleSlider.value = 100;
     scaleValue.textContent = 100;
