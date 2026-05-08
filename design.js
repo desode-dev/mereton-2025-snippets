@@ -360,6 +360,7 @@ window.addEventListener('DOMContentLoaded', function () {
     const fabricWidth = radio.getAttribute('data-fabric-width') || '';
     const fabricGSM   = radio.getAttribute('data-gsm') || '';
     const fabricImage = radio.getAttribute('data-fabric-image') || '';
+    const fabricId    = radio.getAttribute('data-fabric-id') || '';
 
     sessionStorage.setItem('selectedFabric', fabricName);
 
@@ -376,10 +377,12 @@ window.addEventListener('DOMContentLoaded', function () {
     const priceField  = document.querySelector('input[name="price"]');
     const widthField  = document.querySelector('input[name="Print Width"]');
     const weightField = document.getElementById('packageWeight');
+    const fabricIdField = document.getElementById('fabric-id');
 
     if (nameField)  nameField.value  = fabricName;
     if (priceField) priceField.value = '';
     if (widthField) widthField.value = fabricWidth;
+    if (fabricIdField) fabricIdField.value = fabricId;
     if (weightField) {
       weightField.setAttribute('data-width', fabricWidth);
       weightField.setAttribute('data-gsm', fabricGSM);
