@@ -5,6 +5,8 @@ const host=document.getElementById(script.dataset.target||'mereton-preview');
 if(!host||host.dataset.meretonReady)return;
 host.dataset.meretonReady='true';
 const base=new URL('.',script.src);
+const patternUrl=host.dataset.pattern?.trim();
+if(!patternUrl){console.warn('Mereton: provide the CMS textile image URL in data-pattern.');delete host.dataset.meretonReady;return;}
 const canvas=document.createElement('canvas');canvas.width=canvas.height=1000;canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Chair upholstered in selected textile');host.appendChild(canvas);
 
 const settings={scale:{value:100},repeat:{value:'straight'},light:{value:100},shadows:{value:110},weave:{value:125},edit:{checked:false}};
@@ -13,7 +15,7 @@ const defaults=[{"name": "Back cushion", "outline": [[66, 138], [72, 127], [95, 
 const initialProtect=[[[60, 281], [71.93014705882354, 289.0257352941176], [377.7389705882353, 358.8602941176471], [372.5735294117647, 367.31617647058823], [362.4632352941176, 372.90441176470586], [64.49908088235294, 305.4273897058824]], [[361.81525735294116, 359.31525735294116], [379.8345588235294, 357.2196691176471], [383.30422794117646, 629.0487132352941], [362.5, 631.9669117647059]]];
 function mesh(c){let p=[];for(let y=0;y<5;y++)for(let x=0;x<5;x++){let u=x/4,v=y/4;p.push([c[0][0]*(1-u)*(1-v)+c[1][0]*u*(1-v)+c[2][0]*(1-u)*v+c[3][0]*u*v,c[0][1]*(1-u)*(1-v)+c[1][1]*u*(1-v)+c[2][1]*(1-u)*v+c[3][1]*u*v]);}return p;}
 let regions=defaults.map(r=>({...structuredClone(r),mesh:r.mesh?structuredClone(r.mesh):mesh(r.corners)})),protect=structuredClone(initialProtect),original=false,photoPixels,lighting,texture,tw,th,ready=false,drag=null;
-const photo=new Image(),pattern=new Image();photo.crossOrigin=pattern.crossOrigin='anonymous';photo.src=new URL('assets/chair-final.png',base).href;pattern.src=host.dataset.pattern||new URL('assets/botanical.png',base).href;
+const photo=new Image(),pattern=new Image();photo.crossOrigin=pattern.crossOrigin='anonymous';photo.src=new URL('chair-final.png',base).href;pattern.src=patternUrl;
 function pixels(img,w,h){let c=document.createElement('canvas');c.width=w;c.height=h;let x=c.getContext('2d');x.drawImage(img,0,0,w,h);return x.getImageData(0,0,w,h).data;}
 // Alpha-weighted local luminance keeps transparent edges from creating dark halos.
 function extractLighting(data){const n=1000,stride=n+1,sum=new Float64Array(stride*stride),weight=new Float64Array(stride*stride),lum=new Float32Array(n*n),smooth=new Float32Array(n*n);for(let y=0;y<n;y++){let row=0,wr=0;for(let x=0;x<n;x++){let k=y*n+x,i=k*4,a=data[i+3]/255;lum[k]=data[i]*.2126+data[i+1]*.7152+data[i+2]*.0722;row+=lum[k]*a;wr+=a;let z=(y+1)*stride+x+1;sum[z]=sum[z-stride]+row;weight[z]=weight[z-stride]+wr;}}for(let y=0;y<n;y++)for(let x=0;x<n;x++){let l=Math.max(0,x-5),r=Math.min(n,x+6),t=Math.max(0,y-5),b=Math.min(n,y+6),a=t*stride+l,c=t*stride+r,d=b*stride+l,e=b*stride+r,w=weight[e]-weight[c]-weight[d]+weight[a];smooth[y*n+x]=w>.01?(sum[e]-sum[c]-sum[d]+sum[a])/w:lum[y*n+x];}return{lum,smooth};}
