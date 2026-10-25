@@ -27,13 +27,19 @@ function mask(r){let c=document.createElement('canvas');c.width=c.height=1000;le
 function mod(x,n){return((x%n)+n)%n;}
 // One global scale setting is shared by all views. Measured mode uses centimetres.
 const physicalSizes=new Map();let repeatCm=null;
+// Approximate real widths supplied by the user. UV spans share a consistent
+// centimetres-per-template-unit ratio; projection remains the calibrated 2D mesh.
+const itemWidthsCm={chair:80,swimsuit:38,cushion:60};
+const itemTemplateWidths={chair:900,swimsuit:627,cushion:1000};
+function estimateItem(view,width){itemWidthsCm[view]=width;const list=view==='chair'?defaults:view==='swimsuit'?swimDefaults:cushionDefaults,cmPerUnit=width/itemTemplateWidths[view];for(const r of list)physicalSizes.set(view+'|'+r.name,{width:(r.corners[1][0]-r.corners[0][0])*cmPerUnit,height:(r.corners[2][1]-r.corners[0][1])*cmPerUnit,mode:'estimated'});}
+
 function readCmsRepeat(){const width=Number(host.dataset.repeatWidthCm),height=Number(host.dataset.repeatHeightCm);repeatCm=Number.isFinite(width)&&width>0&&Number.isFinite(height)&&height>0?{width,height}:null;}
 readCmsRepeat();
 // Supports CMS values present at initialization and attribute updates by page scripts.
 new MutationObserver(()=>{readCmsRepeat();render();}).observe(host,{attributes:true,attributeFilter:['data-repeat-width-cm','data-repeat-height-cm']});
 function sample(u,v,r){const metric=physicalSizes.get(currentView+'|'+r.name),scale=Number(settings.scale.value)/100,spanX=r.corners[1][0]-r.corners[0][0],spanY=r.corners[2][1]-r.corners[0][1];
- let tx,ty,angle=(r.rotation||0)*Math.PI/180;
- if(metric&&repeatCm){let x=(u+r.x)/spanX*metric.width,y=(v+r.y)/spanY*metric.height;tx=(x*Math.cos(angle)-y*Math.sin(angle))/(repeatCm.width*scale);ty=(x*Math.sin(angle)+y*Math.cos(angle))/(repeatCm.height*scale);}
+ let tx,ty,angle=(r.rotation||0)*Math.PI/180,repeat=repeatCm||{width:55,height:55};
+ if(metric){let x=(u+r.x)/spanX*metric.width,y=(v+r.y)/spanY*metric.height;tx=(x*Math.cos(angle)-y*Math.sin(angle))/(repeat.width*scale);ty=(x*Math.sin(angle)+y*Math.cos(angle))/(repeat.height*scale);}
  else{let x=u*Math.cos(angle)-v*Math.sin(angle)+r.x,y=u*Math.sin(angle)+v*Math.cos(angle)+r.y,size=420*scale,width=repeatCm?size*repeatCm.width/55:size,height=repeatCm?size*repeatCm.height/55:size*th/tw;tx=x/width;ty=y/height;}
  let ix=Math.floor(tx),iy=Math.floor(ty);if(settings.repeat.value==='half')ty+=mod(ix,2)*.5;let fx=mod(tx,1),fy=mod(ty,1);if(settings.repeat.value==='mirror'){if(mod(ix,2))fx=1-fx;if(mod(iy,2))fy=1-fy;}return{x:Math.min(tw-1,fx*tw),y:Math.min(th-1,fy*th)};
 }
@@ -74,11 +80,13 @@ let viewRequest=0;
 async function setView(view){if(!['chair','swimsuit','cushion'].includes(view))throw Error('Unsupported view');let request=++viewRequest,next=view==='swimsuit'?await loadSwim():view==='cushion'?await loadCushion():chairState;if(!next||request!==viewRequest)return;currentView=view;({photoPixels,lighting,regions,protect}=next);canvas.setAttribute('aria-label',view==='swimsuit'?'Swimsuit textile preview':view==='cushion'?'Cushion textile preview':'Chair textile preview');settings.weave.value=125;render();}
 // Future CMS integration can update the preview without any built-in controls.
 let patternRequest=0;
+for(const view of ['chair','swimsuit','cushion'])estimateItem(view,itemWidthsCm[view]);
 window.MeretonVisualiser={
+ setItemWidth(view,widthCm){if(!(view in itemWidthsCm)||!Number.isFinite(widthCm)||widthCm<=0)throw Error('Supply a valid view and positive width in centimetres.');estimateItem(view,widthCm);render();},
  getScale(){return Number(settings.scale.value);},
- getScaleCalibration(){return{repeatCm:repeatCm?{...repeatCm}:null,view:currentView,surfaces:regions.map(r=>({name:r.name,measured:!!repeatCm&&physicalSizes.has(currentView+'|'+r.name)}))};},
+ getScaleCalibration(){return{repeatCm:repeatCm?{...repeatCm}:null,view:currentView,surfaces:regions.map(r=>({name:r.name,measured:!!repeatCm&&physicalSizes.get(currentView+'|'+r.name)?.mode==='measured',estimated:physicalSizes.get(currentView+'|'+r.name)?.mode==='estimated'}))};},
  setRepeatSize(widthCm,heightCm){if(![widthCm,heightCm].every(n=>Number.isFinite(n)&&n>0))throw Error('Repeat dimensions must be positive centimetres.');repeatCm={width:widthCm,height:heightCm};render();},
- setSurfaceSize(view,regionName,widthCm,heightCm){if(!['chair','swimsuit','cushion'].includes(view)||![widthCm,heightCm].every(n=>Number.isFinite(n)&&n>0))throw Error('Supply a view, region name and positive centimetres.');physicalSizes.set(view+'|'+regionName,{width:widthCm,height:heightCm});render();},
+ setSurfaceSize(view,regionName,widthCm,heightCm){if(!['chair','swimsuit','cushion'].includes(view)||![widthCm,heightCm].every(n=>Number.isFinite(n)&&n>0))throw Error('Supply a view, region name and positive centimetres.');physicalSizes.set(view+'|'+regionName,{width:widthCm,height:heightCm,mode:'measured'});render();},
 
  setView,
  getView(){return currentView;},
