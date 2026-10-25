@@ -21,7 +21,7 @@ function pixels(img,w,h){let c=document.createElement('canvas');c.width=w;c.heig
 // Alpha-weighted local luminance keeps transparent edges from creating dark halos.
 function extractLighting(data){const n=1000,stride=n+1,sum=new Float64Array(stride*stride),weight=new Float64Array(stride*stride),lum=new Float32Array(n*n),smooth=new Float32Array(n*n);for(let y=0;y<n;y++){let row=0,wr=0;for(let x=0;x<n;x++){let k=y*n+x,i=k*4,a=data[i+3]/255;lum[k]=data[i]*.2126+data[i+1]*.7152+data[i+2]*.0722;row+=lum[k]*a;wr+=a;let z=(y+1)*stride+x+1;sum[z]=sum[z-stride]+row;weight[z]=weight[z-stride]+wr;}}for(let y=0;y<n;y++)for(let x=0;x<n;x++){let l=Math.max(0,x-5),r=Math.min(n,x+6),t=Math.max(0,y-5),b=Math.min(n,y+6),a=t*stride+l,c=t*stride+r,d=b*stride+l,e=b*stride+r,w=weight[e]-weight[c]-weight[d]+weight[a];smooth[y*n+x]=w>.01?(sum[e]-sum[c]-sum[d]+sum[a])/w:lum[y*n+x];}return{lum,smooth};}
 function setPattern(img){tw=Math.min(img.naturalWidth,1600);th=Math.round(img.naturalHeight*tw/img.naturalWidth);texture=pixels(img,tw,th);render();}
-Promise.all([photo.decode(),pattern.decode()]).then(()=>{photoPixels=pixels(photo,1000,1000);lighting=extractLighting(photoPixels);chairState={photoPixels,lighting,regions,protect};ready=true;setPattern(pattern);}).catch(()=>{console.error('Mereton visualiser: image loading failed.');});
+Promise.all([photo.decode(),pattern.decode()]).then(()=>{photoPixels=pixels(photo,1000,1000);lighting=extractLighting(photoPixels);chairState={photoPixels,lighting,regions,protect};ready=true;if(patternRequest===0)setPattern(pattern);else render();}).catch(()=>{console.error('Mereton visualiser: image loading failed.');});
 function path(c,p){c.beginPath();p.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.closePath();}
 function mask(r){let c=document.createElement('canvas');c.width=c.height=1000;let x=c.getContext('2d');path(x,r.outline);x.fillStyle='#fff';x.fill();x.globalCompositeOperation='destination-out';protect.forEach(p=>{path(x,p);x.fill();});let data=x.getImageData(0,0,1000,1000).data;for(let i=0;i<data.length;i+=4){if(currentView!=='chair'&&photoPixels[i+3]===0)data[i+3]=0;if(currentView==='chair'&&photoPixels[i]+photoPixels[i+1]+photoPixels[i+2]<270)data[i+3]=0;}return data;}
 function mod(x,n){return((x%n)+n)%n;}
@@ -100,5 +100,17 @@ const position=p=>p<=100?(p-5)/.95:p;
 function sync(el,apply){el.min='0';el.max='200';el.step='1';if(!el.dataset.meretonInitialized){el.value=position(window.MeretonVisualiser?.getScale()||100);el.dataset.meretonInitialized='true';}let value=percent(Math.max(0,Math.min(200,Number(el.value))));el.setAttribute('aria-valuetext',value.toFixed(1).replace(/\.0$/,'')+'%');const output=el.dataset.meretonOutput?document.querySelector(el.dataset.meretonOutput):null;if(output)output.textContent=el.getAttribute('aria-valuetext');if(apply)window.MeretonVisualiser?.setScale(value);}
 document.addEventListener('input',e=>{if(e.target.matches('input[type="range"][data-mereton-scale]'))sync(e.target,true);});
 function initialize(){document.querySelectorAll('input[type="range"][data-mereton-scale]').forEach(el=>sync(el,false));}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialize,{once:true});else initialize();
+})();
+
+// Colour swatches: delegated events also support CMS-rendered swatches.
+(() => {
+'use strict';
+const selector='input[type="radio"][name="Colour"][data-image]';
+let selectedImage=null;
+function applyRadio(radio){if(!radio||!radio.checked||radio.disabled)return;const url=radio.dataset.image?.trim();if(!url||url===selectedImage||!window.MeretonVisualiser)return;selectedImage=url;window.MeretonVisualiser.setPattern(url).catch(error=>{if(selectedImage===url)selectedImage=null;console.error('Mereton: could not load colour image.',error);});}
+document.addEventListener('change',e=>{if(e.target.matches(selector))applyRadio(e.target);});
+document.addEventListener('click',e=>{const swatch=e.target.closest?.('.colour-swatch');if(!swatch)return;const radio=swatch.querySelector(selector);if(!radio||radio.disabled)return;queueMicrotask(()=>{if(!radio.checked){radio.checked=true;radio.dispatchEvent(new Event('change',{bubbles:true}));}else applyRadio(radio);});});
+function initialize(){applyRadio(document.querySelector(selector+':checked'));}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialize,{once:true});else initialize();
 })();
