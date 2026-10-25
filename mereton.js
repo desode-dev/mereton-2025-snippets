@@ -7,7 +7,13 @@ host.dataset.meretonReady='true';
 const base=new URL('.',script.src);
 const patternUrl=host.dataset.pattern?.trim();
 if(!patternUrl){console.warn('Mereton: provide the CMS textile image URL in data-pattern.');delete host.dataset.meretonReady;return;}
-const canvas=document.createElement('canvas');canvas.width=canvas.height=1000;canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Chair upholstered in selected textile');host.appendChild(canvas);
+const canvas=document.createElement('canvas');canvas.width=canvas.height=1000;canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Chair upholstered in selected textile');host.appendChild(canvas);host.dataset.view='chair';
+const loader=document.createElement('div');loader.className='mereton-loader';loader.setAttribute('role','status');loader.setAttribute('aria-live','polite');loader.setAttribute('aria-label','Loading preview');loader.innerHTML='<span class="mereton-spinner" aria-hidden="true"></span>';host.appendChild(loader);
+const pendingLoads=new Set();
+function beginLoading(){const token={};pendingLoads.add(token);loader.hidden=false;host.setAttribute('aria-busy','true');return token;}
+function finishLoading(token){requestAnimationFrame(()=>requestAnimationFrame(()=>{pendingLoads.delete(token);loader.hidden=pendingLoads.size===0;host.setAttribute('aria-busy',String(pendingLoads.size>0));}));}
+function showLoadingFrame(){return new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));}
+const initialLoad=beginLoading();
 
 let currentView='chair',chairState,swimState,cushionState;
 const settings={scale:{value:100},repeat:{value:'straight'},light:{value:100},shadows:{value:110},weave:{value:125},edit:{checked:false}};
@@ -21,7 +27,7 @@ function pixels(img,w,h){let c=document.createElement('canvas');c.width=w;c.heig
 // Alpha-weighted local luminance keeps transparent edges from creating dark halos.
 function extractLighting(data){const n=1000,stride=n+1,sum=new Float64Array(stride*stride),weight=new Float64Array(stride*stride),lum=new Float32Array(n*n),smooth=new Float32Array(n*n);for(let y=0;y<n;y++){let row=0,wr=0;for(let x=0;x<n;x++){let k=y*n+x,i=k*4,a=data[i+3]/255;lum[k]=data[i]*.2126+data[i+1]*.7152+data[i+2]*.0722;row+=lum[k]*a;wr+=a;let z=(y+1)*stride+x+1;sum[z]=sum[z-stride]+row;weight[z]=weight[z-stride]+wr;}}for(let y=0;y<n;y++)for(let x=0;x<n;x++){let l=Math.max(0,x-5),r=Math.min(n,x+6),t=Math.max(0,y-5),b=Math.min(n,y+6),a=t*stride+l,c=t*stride+r,d=b*stride+l,e=b*stride+r,w=weight[e]-weight[c]-weight[d]+weight[a];smooth[y*n+x]=w>.01?(sum[e]-sum[c]-sum[d]+sum[a])/w:lum[y*n+x];}return{lum,smooth};}
 function setPattern(img){tw=Math.min(img.naturalWidth,1600);th=Math.round(img.naturalHeight*tw/img.naturalWidth);texture=pixels(img,tw,th);render();}
-Promise.all([photo.decode(),pattern.decode()]).then(()=>{photoPixels=pixels(photo,1000,1000);lighting=extractLighting(photoPixels);chairState={photoPixels,lighting,regions,protect};ready=true;if(patternRequest===0)setPattern(pattern);else render();}).catch(()=>{console.error('Mereton visualiser: image loading failed.');});
+Promise.all([photo.decode(),pattern.decode()]).then(()=>{photoPixels=pixels(photo,1000,1000);lighting=extractLighting(photoPixels);chairState={photoPixels,lighting,regions,protect};ready=true;if(patternRequest===0)setPattern(pattern);else render();}).catch(()=>{console.error('Mereton visualiser: image loading failed.');}).finally(()=>finishLoading(initialLoad));
 function path(c,p){c.beginPath();p.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));c.closePath();}
 function mask(r){let c=document.createElement('canvas');c.width=c.height=1000;let x=c.getContext('2d');path(x,r.outline);x.fillStyle='#fff';x.fill();x.globalCompositeOperation='destination-out';protect.forEach(p=>{path(x,p);x.fill();});let data=x.getImageData(0,0,1000,1000).data;for(let i=0;i<data.length;i+=4){if(currentView!=='chair'&&photoPixels[i+3]===0)data[i+3]=0;if(currentView==='chair'&&photoPixels[i]+photoPixels[i+1]+photoPixels[i+2]<270)data[i+3]=0;}return data;}
 function mod(x,n){return((x%n)+n)%n;}
@@ -77,7 +83,7 @@ const cushionDefaults=[{"name": "Cushion", "outline": [[0, 0], [1000, 0], [1000,
 async function loadCushion(){if(cushionState)return cushionState;let im=new Image();im.crossOrigin='anonymous';im.src='https://cdn.jsdelivr.net/gh/desode-dev/mereton-2025-snippets@076bdf6ecdce917a688a37691785a4ee84b0d781/cushion-single.png';await im.decode();let data=pixels(im,1000,1000);for(let i=0;i<data.length;i+=4){if(!data[i+3]){data[i]=data[i+1]=data[i+2]=0;continue;}let l=data[i]*.2126+data[i+1]*.7152+data[i+2]*.0722,neutral=Math.max(170,Math.min(245,224+(l-115)*.7));data[i]=data[i+1]=data[i+2]=neutral;}return cushionState={photoPixels:data,lighting:extractLighting(data),regions:cushionDefaults.map(r=>({...structuredClone(r),mesh:r.mesh?structuredClone(r.mesh):mesh(r.corners)})),protect:[]};}
 function activeState(){return currentView==='cushion'?cushionState:swimState;}
 let viewRequest=0;
-async function setView(view){if(!['chair','swimsuit','cushion'].includes(view))throw Error('Unsupported view');let request=++viewRequest,next=view==='swimsuit'?await loadSwim():view==='cushion'?await loadCushion():chairState;if(!next||request!==viewRequest)return;currentView=view;({photoPixels,lighting,regions,protect}=next);canvas.setAttribute('aria-label',view==='swimsuit'?'Swimsuit textile preview':view==='cushion'?'Cushion textile preview':'Chair textile preview');settings.weave.value=125;render();}
+async function setView(view){if(!['chair','swimsuit','cushion'].includes(view))throw Error('Unsupported view');const request=++viewRequest,token=beginLoading();try{await showLoadingFrame();const next=view==='swimsuit'?await loadSwim():view==='cushion'?await loadCushion():chairState;if(!next||request!==viewRequest)return;currentView=view;({photoPixels,lighting,regions,protect}=next);host.dataset.view=view;canvas.setAttribute('aria-label',view==='swimsuit'?'Swimsuit textile preview':view==='cushion'?'Cushion textile preview':'Chair textile preview');settings.weave.value=125;render();}finally{finishLoading(token);}}
 // Future CMS integration can update the preview without any built-in controls.
 let patternRequest=0;
 for(const view of ['chair','swimsuit','cushion'])estimateItem(view,itemWidthsCm[view]);
@@ -90,7 +96,7 @@ window.MeretonVisualiser={
 
  setView,
  getView(){return currentView;},
- async setPattern(url){const request=++patternRequest;const img=new Image();img.crossOrigin='anonymous';img.src=url;await img.decode();if(request!==patternRequest)return;setPattern(img);},
+ async setPattern(url){const request=++patternRequest,token=beginLoading();try{await showLoadingFrame();const img=new Image();img.crossOrigin='anonymous';img.src=url;await img.decode();if(request!==patternRequest)return;setPattern(img);}finally{finishLoading(token);}},
  setScale(percent){const n=Number(percent);if(!Number.isFinite(n)||n<=0)throw new Error('Scale must be a positive number.');settings.scale.value=Math.max(5,Math.min(200,n));render();host.dispatchEvent(new CustomEvent('mereton:scalechange',{detail:{percent:settings.scale.value}}));},
  setRepeat(mode){if(!['straight','half','mirror'].includes(mode))throw new Error('Unsupported repeat mode.');settings.repeat.value=mode;render();}
 };
